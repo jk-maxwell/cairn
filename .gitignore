@@ -1,0 +1,58 @@
+# ---------------------------------------------------------------------------
+# Cairn: what must never be committed.
+#
+# Rule two of the product is "nothing leaves the machine." In a public repo that
+# rule has teeth only if the ignore list has teeth. Everything below is either
+# user content, derived user content, or a local secret. None of it belongs in
+# version control, and none of it belongs on a remote.
+#
+# This is an allow-nothing list for data, not a tidy-up list. If you are adding
+# an exception here, stop and be sure.
+# ---------------------------------------------------------------------------
+
+# --- user content and everything derived from it ---------------------------
+sources/            # documents the user deliberately saved
+vault/              # converted markdown of those documents
+*.db                # cairn.db and any sibling database
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+benchmarks.csv      # local speed log; metrics only, but it is machine-local
+gates.txt           # local gate output
+_ingest_failures.log
+
+# --- transfer artifacts from the pre-git working method --------------------
+*.zip
+cargo*/
+backup-*/
+
+# --- local tooling and machine-specific config -----------------------------
+.claude/
+.mcp.json
+.env
+.env.*
+*.local.json
+
+# --- python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- editors and operating systems -----------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

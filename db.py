@@ -1,0 +1,58 @@
+"""
+Cairn storage: SQLite schema and connection.
+
+This module owns the documents and chunks tables that ingestion writes.
+The vector table (sqlite-vec) is created by the index step, not here, so
+ingestion has no dependency on sqlite-vec being present.
+"""
+
+import sqlite3
+import config
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS documents (
+    doc_id          TEXT PRIMARY KEY,   -- stable id derived from the source path
+    source_path     TEXT NOT NULL,      -- absolute path to the original document
+    source_name     TEXT NOT NULL,
+    source_url      TEXT,               -- canonical web URL when known (else NULL); scraper fills this at fetch time
+    source_modified TEXT,               -- source file mtime (ISO 8601 UTC)
+    content_hash    TEXT,               -- hash of converted text, for change detection
+    vault_path      TEXT,               -- where the converted .md was written
+    ingested_at     TEXT,
+    status          TEXT DEFAULT 'draft'-- records classification: draft | final | restricted
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    chunk_id    TEXT PRIMARY KEY,       -- doc_id + ordinal
+    doc_id      TEXT NOT NULL,
+    ordinal     INTEGER NOT NULL,
+    heading     TEXT,                   -- heading path context, e.g. "Chapter 43.105 > 43.105.020"
+    text        TEXT NOT NULL,
+    char_count  INTEGER,
+    embedded    INTEGER NOT NULL DEFAULT 0,  -- 0 until the index step embeds it
+    FOREIGN KEY (doc_id) REFERENCES documents(doc_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_doc      ON chunks(doc_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_embedded ON chunks(embedded);
+"""
+
+
+def connect():
+    conn = sqlite3.connect(config.DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON")   # so deleting a document cascades to its chunks
+    conn.execute("PRAGMA journal_mode = WAL")  # readers (the future service) do not block the writer
+    return conn
+
+
+def init_db(conn):
+    conn.executescript(SCHEMA)
+    _migrate(conn)
+    conn.commit()
+
+
+def _migrate(conn):
+    """Add columns that may be missing from an older database. Idempotent and safe."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
+    if "source_url" not in cols:
+        conn.execute("ALTER TABLE documents ADD COLUMN source_url TEXT")
