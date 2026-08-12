@@ -55,26 +55,32 @@ To be equally clear about what Cairn does not do: it does not record meetings, r
 **You need:** Python 3.10 or newer, and [Ollama](https://ollama.com) running locally.
 
 ```bash
-# 1. Models
+# 1. Models (these must exist before anything else works)
 ollama pull nomic-embed-text
 ollama pull qwen3:4b-instruct-2507-q4_K_M
 
 # 2. Dependencies
-pip install sqlite-vec markitdown
+python3 -m venv .venv
+./.venv/bin/pip install sqlite-vec 'markitdown[all]'
 
-# 3. Check everything is wired up (20 gates)
-python selftest.py
-
-# 4. Save some documents
+# 3. Save some documents
 mkdir -p sources
 cp ~/some-policies/*.pdf sources/
-python ingest.py     # convert and chunk
-python index.py      # embed into the local vector index
+./.venv/bin/python ingest.py     # convert and chunk
+./.venv/bin/python index.py      # embed into the local vector index
+
+# 4. Check everything is wired up (20 gates)
+./.venv/bin/python selftest.py
 
 # 5. Ask
-python ask.py                              # web interface on http://127.0.0.1:8765
-python ask.py --ask "what did we decide about the exception process?"
+./.venv/bin/python ask.py        # web interface on http://127.0.0.1:8765
+./.venv/bin/python ask.py --ask "what did we decide about the exception process?"
 ```
+
+Two things that will bite you, both verified on a clean macOS install:
+
+- **Quote `'markitdown[all]'`.** Unquoted, zsh treats the brackets as a glob and the command fails before pip sees it. Plain `markitdown` installs without the converters for PDF, Word, PowerPoint, and Excel, so every file type in the supported list except plain text and markdown will silently fail to convert.
+- **Save and index before you run the preflight.** The preflight checks that the database has vectors in it, so on a fresh install with an empty corpus it correctly fails at the third gate. That is the gate doing its job, not a broken install.
 
 ### Using your own chat client
 
