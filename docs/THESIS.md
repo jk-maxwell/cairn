@@ -1,8 +1,8 @@
 # Cairn Product Thesis
 
-**Draft 4. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
+**Draft 5. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
 
-Changes from draft 3: generation added as the fifth capability and as section 7, with the draft-versus-dispatch boundary; later sections renumbered (dream is 8, embeddings 9, commodity 10, promises 11, open questions 12, prototype 13); promise 3 gains its dispatch clause; the generated mark and ratification are distinguished as provenance versus accountability.
+Changes from draft 4: connectors added as section 8, a data contract rather than a code contract, with the vault as the integration bus, first-party in-tree connectors per domain per platform, and files as the floor; later sections renumbered (dream is 9, embeddings 10, commodity 11, promises 12, open questions 13, prototype 14); the promises section states the checkable security posture.
 
 ---
 
@@ -44,7 +44,7 @@ Alongside the two source kinds sits a **derived layer**: summaries, diagram desc
 | Spreadsheets | Either | Converted to markdown tables where sensible, artifact otherwise |
 | Process maps, diagrams, SOPs | Mostly reflection | Section 4 |
 
-Every import is user-initiated. The importers ship together, not in sequence: each has been prototyped elsewhere with heavy precedent, and they are treated as solved problems, not research.
+Every import is user-initiated. The importers ship together, not in sequence: each has been prototyped elsewhere with heavy precedent, and they are treated as solved problems, not research. The mechanics of arrival, and of everything that reaches back out, are the connector layer in section 8.
 
 ## 4. Process maps, diagrams, and SOPs
 
@@ -68,7 +68,7 @@ The plugin adds five capabilities:
 2. **Ask.** Chat over the vault, grounded: every claim cited, refusal when the vault does not contain the answer, retrieval strength on every receipt. Answers are ephemeral unless deliberately saved.
 3. **Distill.** Extraction of decisions, commitments, action items, and open questions from working content. Never affect, tone, or assessments of individuals. Output is always a draft until ratified (section 6).
 4. **Generate.** From what the vault holds, proposals for what comes next: tasks, calendar events, messages, email, documents, and briefs. Section 7.
-5. **Dream.** Section 8.
+5. **Dream.** Section 9.
 
 Leverage the ecosystem before writing anything: Obsidian's official Importer plugin, existing chat plugins, Excalidraw, Dataview. Build only what is missing.
 
@@ -101,7 +101,17 @@ Outputs split by where they land, and the split is the whole design:
 
 No graduation path exists across the boundary. Tier graduation (section 6) applies inside the vault only; dispatch never becomes journaled, not even in the future state.
 
-## 8. Dream mode
+## 8. Connectors
+
+Import, refresh, and fulfillment staging all touch systems Cairn does not own, and the mechanics differ by platform: COM automation on Windows, AppleScript on macOS, file exports everywhere. The tempting answer is a plugin system of Cairn's own. The actual answer is a data contract rather than a code contract, in three layers:
+
+1. **The vault is the integration bus.** Anything that can put a well-formed markdown file in the vault is an importer: a Cairn connector, another Obsidian plugin, a shell script. The contract is a documented metadata convention carried in frontmatter: which cut, what source, what snapshot date. Existing ecosystem importers are supply, not competition; they land content on the bus. Content arriving without the convention is not rejected, it lands unclassified and the review inbox asks for its cut, which is the section 6 mechanic doing double duty.
+2. **First-party connectors fill the gaps, in-tree.** Where the ecosystem has no path, chiefly the user-steered platform automation of sections 2 and 7, Cairn ships its own connectors as ordinary reviewed code in this repository: one per domain per platform, no dynamic loading, ever. Each declares its domain (email, calendar, files and shares), its direction (read, stage, or both), and its mechanism. All are disabled by default and enabled individually.
+3. **Files are the floor.** Every domain works with nothing but standard formats and user exports: .eml and mailbox exports, .ics, drag and drop. Platform automation is an accelerator, never a requirement, so a locked-down machine or a missing mechanism degrades convenience, not capability.
+
+Extension by third parties happens through the vault as data, never through code injected into Cairn. That single rule is what keeps the promises of section 12 checkable rather than aspirational.
+
+## 9. Dream mode
 
 While you are away, Cairn improves the vault with idle local compute: discovers and adds links between related notes and reflections, normalizes formatting, refreshes embeddings, builds and maintains index notes, flags stale reflections, and drafts distillations and generation proposals from new working content for the review inbox.
 
@@ -111,7 +121,7 @@ Three rules keep it trustworthy:
 2. **Every change is journaled.** The dream journal records what changed and why. No journal entry, no change.
 3. **Everything is reversible.** The vault is under version control. A morning diff shows the night's work, and one step reverts it.
 
-## 9. Embeddings and summarization
+## 10. Embeddings and summarization
 
 **Embeddings.** Every source file and every ratified record is chunked heading-aware and embedded with a local model. Embeddings are derived data in the strictest sense: disposable, regenerable, refreshed incrementally during dreaming, and never something the user manages. Two exclusions are deliberate: unratified drafts and the dream journal are not indexed, so a proposal can never cite itself as evidence. The prototype proved this pipeline; the plugin reimplements it against the vault.
 
@@ -122,7 +132,7 @@ Three rules keep it trustworthy:
 
 Distillation is the third and most constrained form of summarization, and it is governed entirely by sections 5 and 6: facts only, draft until ratified.
 
-## 10. Commodity and product
+## 11. Commodity and product
 
 **Commodity, leaned on and never rebuilt:** local models via Ollama, Obsidian and its plugin ecosystem, markdown, document conversion libraries, vector search.
 
@@ -132,7 +142,7 @@ Distillation is the third and most constrained form of summarization, and it is 
 2. **The discipline.** No receipt, no answer. Refusal over guessing. Ratification as the gate into memory. Distillation that extracts facts and never characterizes people. Drafts across the boundary, never dispatch.
 3. **Dreaming with a journal.** Background improvement you can audit and revert.
 
-## 11. What Cairn promises any user
+## 12. What Cairn promises any user
 
 Nothing in Cairn is specific to any organization, sector, or policy regime. The promises are generic and hold everywhere it runs:
 
@@ -140,13 +150,16 @@ Nothing in Cairn is specific to any organization, sector, or policy regime. The 
 2. **It ingests only what you point it at.** Every import is user-initiated. There is no ambient monitoring. Dream mode reorganizes what is already in the vault; it collects nothing.
 3. **It never speaks for you.** No receipt, no answer. No record without ratification. Drafts in other systems, never dispatch: sending, accepting, and posting are yours alone.
 
-## 12. Open questions
+The promises are checkable, not aspirational, and a security review can verify them in three sentences: the core executes no third-party code and makes no network calls beyond local model inference on localhost; connectors are the only code that touches other systems, and every one is named, small, in this repository, and off by default; extension happens through data in the vault, never through code loaded into Cairn.
+
+## 13. Open questions
 
 1. **Graduation criteria.** When the future state arrives, what evidence earns an action class its promotion from ratified to journaled: a count of consistent acceptances, an explicit user grant, or both? Non-blocking for v1.
 2. **Ratification cost.** The cost of ratifying must stay near zero or the inbox becomes a guilt pile and the loop gets bypassed. What near-zero looks like is a design problem for the inbox, and the first thing to watch in daily use.
-3. **The COM proof of concept.** Two capabilities now depend on the COM automation proof of concept: reflection refresh (section 2) and fulfillment staging (section 7). It has not yet landed in this repository, and it needs the same treatment as everything else here: scrubbed, genericized, and gated before it ships.
+3. **The COM proof of concept.** Two capabilities now depend on the COM automation proof of concept: reflection refresh (section 2) and fulfillment staging (section 7). It has not yet landed in this repository, and it arrives as a section 8 connector: scrubbed, genericized, and gated before it ships.
+4. **The metadata convention.** The frontmatter contract in section 8 is the public interface of the whole connector layer, so its fields deserve deliberate design: cut, source, snapshot date are the obvious three, and what else earns a place decides how much the bus can carry.
 
-## 13. What survives from the prototype
+## 14. What survives from the prototype
 
 The prototype proved the hard parts: grounded retrieval with receipts, refusal gates that hold, a deterministic front door that answers without a model call, a protocol surface any chat client can use, and 20 gates green on two operating systems.
 
