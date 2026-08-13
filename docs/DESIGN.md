@@ -1,5 +1,7 @@
 # Cairn Design
 
+> **Superseded, 2026-08-13.** This draft described Cairn as a standalone application and was never reviewed. The product was redefined before review by [THESIS.md](THESIS.md), which is ratified and authoritative. This file is kept as a record of the path taken; nothing in it should be built from.
+
 *Draft 1. Numbered for markup. Nothing here is built yet.*
 
 The roadmap says what and when. This says how, and what Cairn actually is.

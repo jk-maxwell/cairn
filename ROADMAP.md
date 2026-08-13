@@ -1,137 +1,101 @@
 # Cairn Roadmap
 
-*What Cairn is, what it can do today, and what it has to earn next.*
+*From a ratified thesis to a tool that earns its daily open.*
 
-Cairn is a local, private tool that answers questions from the documents you saved, and cites a source for every claim. It runs entirely on your machine. It has no cloud service, no account, and no path for your material to leave.
-
-This roadmap is written against evidence. Every number below was measured, not estimated, and every problem named here was found by using the tool rather than by imagining how it might fail.
+Cairn turns [Obsidian](https://obsidian.md) into a private working memory for one person. The full product definition, ratified after five rounds of review, is [docs/THESIS.md](docs/THESIS.md). This roadmap sequences the work of building it, and it is written against evidence: every number below was measured, not estimated, and every horizon ends at a gate that can fail.
 
 ---
 
-## Where Cairn is today
+## 1. What is true today
 
-The engine works. The product around it does not exist yet.
+A ratified product thesis. Fourteen sections defining the vault as the hub, the personal and reflection content cut, five capabilities (Import, Ask, Distill, Generate, Dream), ratification as the gate into memory, and a connector layer built on a data contract rather than a code contract.
 
-**Working now.** A document goes in and a cited answer comes out. Conversion and chunking are deterministic and re-runnable. Retrieval is nearest-neighbour search over local embeddings. Synthesis is constrained to the retrieved passages, and every answer carries a receipt naming the passages it stands on and how close the match actually was. A deterministic front door answers greetings and questions about the tool itself without calling a model at all. A local-model protocol surface lets any OpenAI-compatible or Ollama-compatible chat client become the interface, so the tool has a usable face without owning one.
+A working reference implementation. The Python engine from the proof-of-concept phase: grounded retrieval with a receipt on every answer, refusal when the corpus does not contain the answer, a deterministic front door that answers without a model call, a protocol surface any OpenAI-compatible or Ollama-compatible chat client can use, and 20 gates green on two operating systems. On capable hardware a real question answers in 1.2 seconds end to end.
 
-**Measured, on the original development machine.**
+Zero lines of plugin code. The product the thesis describes is not built. Between those two sentences sits this entire document.
 
-| Quantity | Measurement |
-| --- | --- |
-| Real question, full answer | 80 to 182 seconds |
-| Greeting, before the front door | 96 seconds |
-| Greeting, after the front door | 0.0 seconds, no model call |
-| Question with nothing to find | 0.2 seconds, no model call |
-| Frozen benchmark, warm, best observed | 0.8s to first token, 9.0s total, 7 tokens/sec |
-| Frozen benchmark, warm, most recent | 1.1s to first token, 16.5s total, 4 tokens/sec |
-| Gates in the preflight suite | 20 |
+One known defect. In the reference engine's shared answer path, the retrieval-strength description is overwritten before the receipt is assembled, truncating the strength line on clean answers and doubling the warning on flagged ones. It matters more now than when it was found, for a reason named in Horizon 1.
 
-**Retrieval distances observed so far.** Real answerable questions have landed at 0.754, 0.843, and 0.891. Non-questions have landed at 1.055 and 1.094. Nothing has yet been observed between 0.89 and 1.05.
+## 2. The shape of the work
 
-**Not built.** Saving a document means dropping a file in a folder and running two scripts. There is no way to see what the tool holds or how fresh it is. There is no way to ask it to prepare anything. It has run on exactly one machine, on one operating system, against one corpus.
+The order below is dependency, not preference.
 
----
+**The convention leads** because it is the public interface of everything. The frontmatter contract, which cut, what source, what snapshot date, what provenance, gets read by the index, the importers, the receipts, and the dreaming rules. Designing it late means migrating a live vault.
 
-## What the experiment taught
+**The probe runs first** because the biggest risk is not technical. The prototype proved the engine; nothing yet proves the habit. An existing chat plugin pointed at the reference engine's endpoint, on a real vault, answers the question "does the author actually reach for this inside Obsidian" in days, before the expensive rewrite begins.
 
-Cairn was built across three sessions in a deliberately awkward way: a human carried every file between the editor and the machine by hand. That method is now retired. Three things it produced are worth keeping.
+**Dreaming ships last** because it is the only capability that acts while nobody watches. It goes behind the journal, the one-step revert, and the content cut, all proven in daylight first.
 
-**1. Determinism before intelligence.** The cheapest answer is the one you never generate. A greeting used to cost 96 seconds because the tool embedded it, retrieved five irrelevant passages, and asked a language model to explain why statutes do not address salutations. Answering it from a checked-in template instead took the cost to zero. The same reasoning gave the no-hope distance floor: when retrieval already knows there is nothing to find, spending 90 seconds having a model discover that is waste. Reach for a model last, not first.
+**The gates are the spec.** The engine logic lives in plain TypeScript, separate from the plugin's interface layer, so the ported gate suite runs headless in continuous integration. The rewrite is done when the ported gates go green, and no gate counts until it has been seen to fail.
 
-**2. The contract lives in the engine, and the interface is disposable.** Serving a standard local-model protocol meant a chat client that had not been updated in two years became a working interface in a single session, with no changes to it. The client believes it is talking to a language model. It is talking to retrieval, grounded synthesis, and citations. Because the client's system prompt, sampling settings, and model choice are discarded at the door rather than merged, no interface can weaken the grounding rules, and no text inside a document can talk its way into becoming an instruction.
+## 3. Horizon 1: the vault answers
 
-**3. Gates, not claims.** Nothing is considered working because it was written carefully. It is considered working because a check that has been verified to fail when the property breaks now passes. This caught real defects that reading the code did not: a benchmark that silently changed its own payload and made every historical measurement incomparable, a refusal that technically contained the right sentence while reading as two paragraphs of hedging, and an answer that cited a sixth passage when only five existed.
-
----
-
-## Horizon 1: fast enough to reach for
-
-**The outcome.** Someone reaches for Cairn during a meeting instead of saying "I'll look that up."
-
-**Why this is first.** Nothing else matters at three minutes per answer. Every other improvement is invisible behind that wait, and a tool nobody reaches for cannot teach us anything, because the disappointments that drive this roadmap only appear in daily use.
-
-**Exit gate.** A real question over a realistic corpus returns a cited answer in under 10 seconds on reference hardware, measured by a committed benchmark and logged to a file, on three consecutive runs.
+**The outcome.** A question typed in Obsidian gets a cited answer from the vault, with a receipt, or an honest refusal.
 
 **The work, in order.**
 
-1. **Build a benchmark that can see the problem.** The current frozen benchmark runs about a tenth of realistic evidence size, so it cannot measure the latency a user actually feels. A second frozen prompt at realistic evidence size, roughly 10,000 characters, comes first because everything after it is guesswork without a measuring stick.
+1. **The metadata convention**, drafted as a short design document and reviewed before anything reads it.
+2. **The v0 probe**, in week one: an existing chat plugin against the reference engine on a real vault. Its finding shapes the Ask surface and tests the habit bet early.
+3. **Fix the receipt defect in the reference engine**, with a gate asserting the whole strength sentence. This precedes the port because the parity gates freeze golden answers from the reference, and golden answers frozen from a defective reference make the defect the spec.
+4. **The TypeScript engine port**: heading-aware chunking, embeddings over Ollama HTTP, retrieval, receipts, refusal, front door. Acceptance is the ported gate suite plus golden-answer parity gates against the reference on a frozen corpus. Cold models make byte-comparable output a fair standard, so divergence is a failing gate, not a judgment call.
+5. **The content index**: per file, its hash, cut, source, snapshot date, and processing state. With it, the rebuild gate: drop every derived store, rebuild from the vault alone, get the same answers.
+6. **The Ask surface** in the plugin, with the evidence-not-instructions gate landing here, before any importer exists, so the defense precedes the first attacker-authored content.
 
-2. **Rule out the configuration layer before touching the code.** Generation is running at roughly 57 percent of its own recorded baseline, with the same model, question, evidence, and prompt. A hardware acceleration log line appeared between the two measurements. Check the acceleration environment, the runtime version against the recorded baseline, and whether the model is placed on the GPU or the CPU during a run. If the cause is configuration, then retrieval breadth and generation limits are the wrong levers and pulling them would hide the real problem.
+**Exit gate, two parts, both able to fail.**
 
-3. **Then, and only then, the latency levers.** Retrieval breadth, generated token limits, context sizing, and prompt length are all candidates, and each one trades away something real. None of them is worth spending until step two says where the time is actually going.
+- Ported gates, parity gates, injection gate, and rebuild gate all green in continuous integration.
+- After two weeks on a real vault, the receipt log shows real questions asked on most working days, and the author can name three answers that beat the old way of finding out. The log can show silence. Silence is the gate failing.
 
-4. **Fix the receipt defect and gate it properly.** In the shared answer path, the retrieval-strength description is overwritten by the citation-integrity check before the receipt is assembled, so every clean answer on the protocol interface renders its strength line truncated and every flagged answer prints its warning twice. The existing check misses this because it asserts only that the line begins correctly. The fix is small. The gate that asserts the whole sentence is the point.
+## 4. Horizon 2: the desk flows in
 
----
-
-## Horizon 2: installable by someone who is not the author
-
-**The outcome.** A person who has never seen this repository installs it and gets a cited answer from their own documents, without help.
-
-**Why this is second.** This is the threshold between a personal experiment and a product. It is also the only honest way to find out whether the design holds anywhere other than the machine it was born on.
-
-**Exit gate.** A person on macOS, Windows, or Linux goes from clone to a cited answer in under 15 minutes, following only the README, verified by someone who did not write it.
+**The outcome.** Email, calendar, meeting notes, documents, spreadsheets, and diagrams land in the vault through deliberate import, and what they carry becomes decisions, commitments, and tasks through ratification.
 
 **The work.**
 
-1. **Package it.** A project file with pinned dependencies, an installable package rather than loose scripts at the root, one command to set up and one command to run. Today the instructions assume a specific Python launcher, a specific path separator, and that the reader already knows which of three scripts to run in which order.
+1. **The import floor**: file drop, .eml, .ics, and document conversion, each arrival carrying convention frontmatter, originals kept as artifacts. Standard formats before any platform automation, so every capability works on every machine from day one.
+2. **The review inbox**, the first ratification surface. Unclassified arrivals come here for their cut assignment; nothing meaning-bearing enters memory except through it.
+3. **Distill**, feeding the inbox: decisions, commitments, action items, open questions. Facts only, never affect, tone, or assessments of individuals.
+4. **Generate, in-vault**: tasks in the ecosystem's standard syntax and drafted briefs. Cairn proposes priority and never sets it.
+5. **Diagram ingestion**: locally generated descriptions so process maps and SOPs become findable and citable, originals untouched.
 
-2. **Make it genuinely portable.** The code carries assumptions from the machine it was written on, including a Windows-only file launcher and Windows path conventions in its own usage strings. Every one of these needs finding and removing, and continuous integration on all three operating systems is what keeps them from coming back.
+**Exit gate.** The three founding pain stories, answered from imported content with receipts: a past decision retrieved from meeting notes; the current version of a policy from reflections, snapshot date visible; a commitment surfaced, ratified, and standing as a task. Plus inbox health, measured: ratification stays near zero cost and the inbox does not accumulate. A guilt pile is the gate failing.
 
-3. **Separate the tool from its first corpus.** The ingestion step derives canonical web links by pattern-matching filenames against one specific jurisdiction's statute naming scheme. That belongs in a plug-in resolver with the original as a worked example, not baked into the core.
+## 5. Horizon 3: it works while you don't
 
-4. **Ship something to ask questions about.** A small sample corpus of generic documents, so a new user reaches a cited answer in the first few minutes rather than after they have found, converted, and indexed material of their own.
-
-5. **Split the preflight suite.** Some gates need a running model server and some do not. The offline ones should run in continuous integration on every change. The online ones stay as the local preflight they are today.
-
----
-
-## Horizon 3: three surfaces, not one
-
-**The outcome.** The tool does the three things it promises, rather than one of them well and two on paper.
-
-**Exit gate.** Saving, asking, and preparing are all usable without the command line, for documents.
+**The outcome.** The vault improves itself under the journal, drafts cross the boundary to other systems but never send themselves, and the whole build is verifiable.
 
 **The work.**
 
-1. **Save, made real.** A watched inbox folder and an explicit process step that reports exactly what was converted, what was chunked, what was indexed, and what failed. Saving is currently three manual steps and a leap of faith.
+1. **Dream mode**: idle-triggered inside Obsidian, chunked and interruptible, every change journaled, one step reverts a night's work. No OS services, ever.
+2. **Cross-boundary generation**: calendar events, messages, and email as drafts, staged after ratification into the other system's own drafting area by user-steered automation. Sending stays human, always.
+3. **Platform connectors**: the COM proof of concept landing scrubbed, genericized, and gated, then its AppleScript sibling. The connector interface is designed before the proof of concept lands, so the code conforms to the product and not the reverse.
+4. **Integrity completion**: reproducible hash-verifiable builds, self-check at load, and the security posture of thesis section 12 checkable end to end.
 
-2. **A coverage view.** What the tool holds, how fresh it is, and what state each document is in. Without this, silence is not diagnosable: a user cannot tell the difference between "nothing was saved about this" and "something is broken."
+**Exit gate.** Thirty days of dreaming with a journal audit showing zero rewrites of personal content and at least one accepted dream proposal a week; one staged draft used in real correspondence; the full rebuild still identical. Thirty days is deliberate: trust in an unwatched capability is earned slowly or not at all.
 
-3. **Prepare, version one.** Ask the tool to assemble a brief on a topic, a project, or a meeting series, from everything saved: what was decided, what was committed, what is still open, every line cited and dated.
+## 6. What can kill this, and when we stop
 
-4. **Conversation as context.** Follow-up questions currently drop the earlier turns and log the drop. Earlier turns should help interpret the question without ever becoming a source of facts. Every turn still retrieves fresh, still cites, and still shows its strength.
+Kill criteria are decisions already made, not warnings.
 
-5. **Recalibrate on accumulated data.** The strength thresholds and the no-hope floor were set from a handful of points, and the evidence so far suggests the top band is catching almost nothing real. A body of daily-use distances is what should set them, not a comment in a file.
+1. **The habit never forms.** If the Horizon 1 usage gate fails twice with the engine healthy, building stops and the surface gets rethought. More features cannot fix an unopened door.
+2. **The port diverges.** Any parity failure against the reference is a stop, investigated to root cause. A retrieval engine that is almost the reference is not the reference.
+3. **The inbox becomes a chore.** If ratification cost stays high after redesign, the human-in-the-loop model itself gets revisited, because a loop everyone bypasses protects no one.
+4. **Dreaming touches what it must not.** A single rewrite of personal content in the audit is a stop, full revert, and redesign. There is no acceptable rate of this defect except zero.
 
----
+Two risks are held by ordering rather than by gates: injection defense lands before the first importer, and performance work waits for a realistic benchmark before touching code, a lesson this project has already paid for once.
 
-## Beyond the horizons
+## 7. Beyond the horizons
 
-These are real and they are next, but they are not scheduled, because each one depends on something the project does not yet control.
+**Graduation.** Action classes earning promotion from asked-every-time to journaled, on the evidence of the accumulated journal. Designed future state, deliberately after the journal has months of record to design from.
 
-**Notes and meetings.** What was decided and what was promised, answerable. This is the capability with the highest daily value and it carries obligations that documents do not, because the tool would be creating working records rather than reflecting existing ones. **A review with whoever owns records and privacy policy in your organization is a hard prerequisite, not a formality.** Self-authored notes are the path in. Meeting transcripts sit behind platform policy that no amount of local code can open.
+**Publishing.** Making the repository public is a one-way door and is not scheduled by any horizon. The integrity work of Horizon 3 is its precondition, not its trigger, and the sensitive-term scan runs before any push regardless.
 
-**People and projects.** How the material connects: who is involved in what, which threads are live, what is waiting on whom.
-
-**Related material.** A "what is semantically near this" view, which the existing index already supports in about twenty lines. Deliberately deferred until daily use proves anyone wants it. It will not be built because a comparable tool has it.
-
----
-
-## Non-goals
-
-These are not "later." They are commitments about what the tool will not become, and they are the reason it can be trusted with working material at all.
-
-1. **Nothing leaves the machine.** No cloud service, no account, no telemetry, no remote inference, no exceptions. This is the first constraint and every other decision yields to it.
-2. **It knows only what it is given.** No background collection, no ambient monitoring, no watching a mailbox or a calendar or a screen. Every document it holds is there because someone deliberately put it there.
-3. **It reads, finds, and cites. It does not act.** No writing to other systems, no sending messages, no taking actions on anyone's behalf.
-4. **It does not measure people.** Distillation extracts decisions, commitments, action items, and open questions. It never records tone, affect, or any assessment of an individual. This is enforced by what the code is built to extract, not by policy.
-5. **No receipt, no answer.** If the tool cannot show you where a claim came from, it does not make the claim.
+**The promises are not on this roadmap** because they are not work items. Nothing leaves the machine; it ingests only what you point it at; it never speaks for you. They hold at every horizon, and any work item that would bend one is out of scope by construction.
 
 ---
 
 ## How this roadmap works
 
-Horizons are sequential, and each one ends at a gate that can fail. Work inside a horizon is ordered but negotiable. Anything that has not been measured is a hypothesis, and anything that has been measured beats an opinion about it.
+Horizons are sequential, and each one ends at a gate that can fail. A failed gate stops the horizon from rolling forward, full stop. Work inside a horizon is ordered but negotiable. Anything unmeasured is a hypothesis, and anything measured beats an opinion about it.
 
 The weekly question stays the one the project started with: **can Cairn answer something today that it could not answer last week.**
