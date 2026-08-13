@@ -1,8 +1,8 @@
 # Cairn Product Thesis
 
-**Draft 3. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
+**Draft 4. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
 
-Changes from draft 2: ratification starts with a review inbox, inline accept follows; tier graduation is named as a future state; reflection refresh can use user-steered platform automation from day one; the gates question is answered in section 12; open questions trimmed to what remains genuinely open.
+Changes from draft 3: generation added as the fifth capability and as section 7, with the draft-versus-dispatch boundary; later sections renumbered (dream is 8, embeddings 9, commodity 10, promises 11, open questions 12, prototype 13); promise 3 gains its dispatch clause; the generated mark and ratification are distinguished as provenance versus accountability.
 
 ---
 
@@ -10,7 +10,7 @@ Changes from draft 2: ratification starts with a review inbox, inline accept fol
 
 Cairn turns Obsidian into a private working memory for one person.
 
-Everything that crosses your desk lands in one local vault as plain text: email, calendar, meeting notes, personal notes, documents, spreadsheets, process maps. A plugin imports it, answers questions over it with a citation for every claim, distills working content into decisions, commitments, and action items, and improves the vault while you are away.
+Everything that crosses your desk lands in one local vault as plain text: email, calendar, meeting notes, personal notes, documents, spreadsheets, process maps. A plugin imports it, answers questions over it with a citation for every claim, distills working content into decisions, commitments, and action items, drafts what comes next in the form of tasks, events, messages, and briefs, and improves the vault while you are away.
 
 The machine drafts, the human ratifies, and ratification is what turns output into memory. Models and infrastructure are commodity. The product is the connected corpus and the discipline applied to it.
 
@@ -62,12 +62,13 @@ The bet underneath the hub choice: the vault is open all day, so capture happens
 
 The plugin is written TypeScript-first for maximum Obsidian compatibility. No sidecar processes unless a wall forces one; that bridge gets crossed if reached. Local models are used over Ollama's HTTP interface for embeddings and generation, which keeps the plugin free of native dependencies.
 
-The plugin adds four capabilities:
+The plugin adds five capabilities:
 
 1. **Import.** The importers in section 3, always user-initiated.
 2. **Ask.** Chat over the vault, grounded: every claim cited, refusal when the vault does not contain the answer, retrieval strength on every receipt. Answers are ephemeral unless deliberately saved.
 3. **Distill.** Extraction of decisions, commitments, action items, and open questions from working content. Never affect, tone, or assessments of individuals. Output is always a draft until ratified (section 6).
-4. **Dream.** Section 7.
+4. **Generate.** From what the vault holds, proposals for what comes next: tasks, calendar events, messages, email, documents, and briefs. Section 7.
+5. **Dream.** Section 8.
 
 Leverage the ecosystem before writing anything: Obsidian's official Importer plugin, existing chat plugins, Excalidraw, Dataview. Build only what is missing.
 
@@ -87,9 +88,22 @@ The boundary still being explored is the middle of the ladder: linking and sorti
 
 Tier assignments are not permanent. Over time an action class can graduate from ratified to journaled as trust accrues, and the journal is what makes graduation safe: the record of proposals that were consistently accepted is the evidence a class is ready. Graduation is a future state; in v1 everything meaning-bearing stays a proposal.
 
-## 7. Dream mode
+## 7. Generation
 
-While you are away, Cairn improves the vault with idle local compute: discovers and adds links between related notes and reflections, normalizes formatting, refreshes embeddings, builds and maintains index notes, flags stale reflections, and drafts distillations from new working content for the review inbox.
+From what the vault holds, emails, meetings, calendar, notes, Cairn suggests what comes next: tasks, calendar events, messages, email drafts, and longer documents and briefs. Distill finds the commitment; Generate proposes the artifact that honors it. Import, distill, generate is the cycle that makes the vault worth opening every morning.
+
+Everything generated is marked generated, permanently. Ratification and the mark are two different facts about the same artifact: the mark says where it came from, adoption says who answers for it. Ratifying a draft promotes it to personal content, yours to use and send, and the provenance never washes out.
+
+Outputs split by where they land, and the split is the whole design:
+
+1. **Inside the vault: tasks, documents, briefs.** Governed by section 6 as usual, drafts into the review inbox, ratified into the vault. Tasks are written in the ecosystem's standard form, Obsidian's native checkboxes or the dominant tasks-plugin syntax, so ordinary tooling picks them up. Cairn does not invent a task system.
+2. **Across the boundary: calendar events, messages, email.** Cairn writes the draft; the human dispatches it. The strongest form Cairn ever produces is a staged draft inside the other system's own drafting area, placed after ratification by user-steered automation, the same wheel-holding rule as reflection refresh: COM automation on Windows can stage the approved draft in the mail client's drafts folder or place the tentative calendar entry. Sending, accepting, and posting are human acts, always.
+
+No graduation path exists across the boundary. Tier graduation (section 6) applies inside the vault only; dispatch never becomes journaled, not even in the future state.
+
+## 8. Dream mode
+
+While you are away, Cairn improves the vault with idle local compute: discovers and adds links between related notes and reflections, normalizes formatting, refreshes embeddings, builds and maintains index notes, flags stale reflections, and drafts distillations and generation proposals from new working content for the review inbox.
 
 Three rules keep it trustworthy:
 
@@ -97,7 +111,7 @@ Three rules keep it trustworthy:
 2. **Every change is journaled.** The dream journal records what changed and why. No journal entry, no change.
 3. **Everything is reversible.** The vault is under version control. A morning diff shows the night's work, and one step reverts it.
 
-## 8. Embeddings and summarization
+## 9. Embeddings and summarization
 
 **Embeddings.** Every source file and every ratified record is chunked heading-aware and embedded with a local model. Embeddings are derived data in the strictest sense: disposable, regenerable, refreshed incrementally during dreaming, and never something the user manages. Two exclusions are deliberate: unratified drafts and the dream journal are not indexed, so a proposal can never cite itself as evidence. The prototype proved this pipeline; the plugin reimplements it against the vault.
 
@@ -108,31 +122,31 @@ Three rules keep it trustworthy:
 
 Distillation is the third and most constrained form of summarization, and it is governed entirely by sections 5 and 6: facts only, draft until ratified.
 
-## 9. Commodity and product
+## 10. Commodity and product
 
 **Commodity, leaned on and never rebuilt:** local models via Ollama, Obsidian and its plugin ecosystem, markdown, document conversion libraries, vector search.
 
 **Product, the part that does not exist elsewhere:**
 
 1. **The cut, enforced.** Personal and reflection treated differently in receipts, dreaming, and loss.
-2. **The discipline.** No receipt, no answer. Refusal over guessing. Ratification as the gate into memory. Distillation that extracts facts and never characterizes people.
+2. **The discipline.** No receipt, no answer. Refusal over guessing. Ratification as the gate into memory. Distillation that extracts facts and never characterizes people. Drafts across the boundary, never dispatch.
 3. **Dreaming with a journal.** Background improvement you can audit and revert.
 
-## 10. What Cairn promises any user
+## 11. What Cairn promises any user
 
 Nothing in Cairn is specific to any organization, sector, or policy regime. The promises are generic and hold everywhere it runs:
 
 1. **Nothing leaves the machine.**
 2. **It ingests only what you point it at.** Every import is user-initiated. There is no ambient monitoring. Dream mode reorganizes what is already in the vault; it collects nothing.
-3. **It never speaks for you.** No receipt, no answer; no record without ratification; no action in any other system.
+3. **It never speaks for you.** No receipt, no answer. No record without ratification. Drafts in other systems, never dispatch: sending, accepting, and posting are yours alone.
 
-## 11. Open questions
+## 12. Open questions
 
 1. **Graduation criteria.** When the future state arrives, what evidence earns an action class its promotion from ratified to journaled: a count of consistent acceptances, an explicit user grant, or both? Non-blocking for v1.
 2. **Ratification cost.** The cost of ratifying must stay near zero or the inbox becomes a guilt pile and the loop gets bypassed. What near-zero looks like is a design problem for the inbox, and the first thing to watch in daily use.
-3. **The refresh proof of concept.** The COM automation proof of concept has not yet landed in this repository. It needs the same treatment as everything else here: scrubbed, genericized, and gated before it ships.
+3. **The COM proof of concept.** Two capabilities now depend on the COM automation proof of concept: reflection refresh (section 2) and fulfillment staging (section 7). It has not yet landed in this repository, and it needs the same treatment as everything else here: scrubbed, genericized, and gated before it ships.
 
-## 12. What survives from the prototype
+## 13. What survives from the prototype
 
 The prototype proved the hard parts: grounded retrieval with receipts, refusal gates that hold, a deterministic front door that answers without a model call, a protocol surface any chat client can use, and 20 gates green on two operating systems.
 
