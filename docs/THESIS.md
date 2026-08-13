@@ -1,8 +1,8 @@
 # Cairn Product Thesis
 
-**Draft 2. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
+**Draft 3. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
 
-Changes from draft 1: added the human-in-the-loop section (6) and the embeddings and summarization section (8); resolved three of the four open questions (importers ship together, TypeScript-first rewrite, distillations as ratified markdown plus embeddings); reflection refresh is manual for now; the derived layer is named in section 2.
+Changes from draft 2: ratification starts with a review inbox, inline accept follows; tier graduation is named as a future state; reflection refresh can use user-steered platform automation from day one; the gates question is answered in section 12; open questions trimmed to what remains genuinely open.
 
 ---
 
@@ -22,7 +22,7 @@ Every piece of source content in the vault is one of two kinds, and the cut is e
 
 **Reflection.** The organization's, or the world's. Timestamped snapshots of shared drives, intranet platforms, published policies, references, SOPs. The source of truth lies elsewhere; the vault holds an extraction taken at a known moment. Reflections are replaceable by re-snapshotting.
 
-Reflections refresh manually for now: shared drives and intranet platforms (SharePoint and its kin) sit behind organizational process, and platform-specific automation, for example COM automation on Windows, is a later probe.
+Reflections refresh under user steering, from day one. Either a manual re-snapshot, or platform automation the user drives in the moment: COM automation on Windows, where a working proof of concept already exists, is the first example. The point is who holds the wheel. A refresh happens because the user asked for it, never on a schedule the user forgot about, which is what keeps refresh inside the promise that Cairn ingests only what you point it at.
 
 The cut decides three things downstream:
 
@@ -75,15 +75,17 @@ Leverage the ecosystem before writing anything: Obsidian's official Importer plu
 
 Cairn's bias is strong and structural: the machine drafts, the human ratifies, and ratification is what turns output into memory. The loop sits in one of three places, and every capability is assigned to a tier deliberately.
 
-1. **Ratified: the human approves before it counts.** Anything that asserts meaning is a proposal until accepted. Distilled decisions, commitments, and action items land in a review inbox; accepting one promotes it to a working record, personal content by adoption, and only then is it embedded and citable. Kept summaries and file moves work the same way. Acceptance is the gate into memory.
+1. **Ratified: the human approves before it counts.** Anything that asserts meaning is a proposal until accepted. Distilled decisions, commitments, and action items land in a review inbox; accepting one promotes it to a working record, personal content by adoption, and only then is it embedded and citable. Kept summaries and file moves work the same way. Acceptance is the gate into memory. The review inbox is the first ratification surface; inline accept, which must understand the context it sits in, follows later.
 2. **Journaled: pre-authorized by class, reviewed after.** Mechanical work runs autonomously: reformatting reflections, refreshing embeddings, flagging staleness, maintaining index notes. Every action is journaled and reversible in one step.
 3. **Forbidden: no authorization exists.** Rewriting personal content. Deleting source content. Transmitting anything anywhere.
 
-The boundary still being explored is the middle of the ladder: linking and sorting are not purely mechanical, because a link asserts relatedness and sorting rearranges the owner's mental map of their own files. Current position, offered for markup:
+The boundary still being explored is the middle of the ladder: linking and sorting are not purely mechanical, because a link asserts relatedness and sorting rearranges the owner's mental map of their own files. The v1 position:
 
 - Inside personal notes, machine contributions live only in a clearly marked block: annotate and link, never inline edits.
 - Inside index notes and reflections, dreaming may link and sort freely, under the journal.
 - Moves and renames of personal files are always proposals, never actions.
+
+Tier assignments are not permanent. Over time an action class can graduate from ratified to journaled as trust accrues, and the journal is what makes graduation safe: the record of proposals that were consistently accepted is the evidence a class is ready. Graduation is a future state; in v1 everything meaning-bearing stays a proposal.
 
 ## 7. Dream mode
 
@@ -126,15 +128,16 @@ Nothing in Cairn is specific to any organization, sector, or policy regime. The 
 
 ## 11. Open questions
 
-1. **The middle-tier boundary.** Does sorting personal files ever graduate from proposal to pre-authorized, or is filing forever a human act? The section 6 position is a starting point, not a settled line.
-2. **Ratification experience.** A review inbox, in-place accept buttons, or both? The cost of ratifying must stay near zero or the inbox becomes a guilt pile and the loop gets bypassed.
-3. **Gates in plugin form.** The prototype's house rule is that nothing lands without a gate that has been seen to fail. What does the gate suite look like inside an Obsidian plugin, and which of the 20 port over as the spec for the rewrite?
-4. **Reflection refresh automation.** Manual re-snapshot for now; the COM automation probe and any platform-specific paths are later work, behind process.
+1. **Graduation criteria.** When the future state arrives, what evidence earns an action class its promotion from ratified to journaled: a count of consistent acceptances, an explicit user grant, or both? Non-blocking for v1.
+2. **Ratification cost.** The cost of ratifying must stay near zero or the inbox becomes a guilt pile and the loop gets bypassed. What near-zero looks like is a design problem for the inbox, and the first thing to watch in daily use.
+3. **The refresh proof of concept.** The COM automation proof of concept has not yet landed in this repository. It needs the same treatment as everything else here: scrubbed, genericized, and gated before it ships.
 
 ## 12. What survives from the prototype
 
 The prototype proved the hard parts: grounded retrieval with receipts, refusal gates that hold, a deterministic front door that answers without a model call, a protocol surface any chat client can use, and 20 gates green on two operating systems.
 
 **Carried forward:** the discipline, the gates as the spec the TypeScript rewrite must pass, and the Python engine as the reference implementation.
+
+**How the gates survive the rewrite:** the engine logic, chunking, retrieval, receipts, refusal, and the front door, lives in plain TypeScript separate from the plugin's interface layer, so the ported gates run headless as an ordinary test suite. The grounding, refusal, receipt, and front-door gates carry over directly because they test behavior, not interface. The rewrite is done when the ported gates go green.
 
 **Retired:** the standalone web interface as the primary surface, and design draft 1, which this document supersedes.
