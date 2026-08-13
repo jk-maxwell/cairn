@@ -1,8 +1,8 @@
 # Cairn Product Thesis
 
-**Draft 5. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
+**Draft 6. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
 
-Changes from draft 4: connectors added as section 8, a data contract rather than a code contract, with the vault as the integration bus, first-party in-tree connectors per domain per platform, and files as the floor; later sections renumbered (dream is 9, embeddings 10, commodity 11, promises 12, open questions 13, prototype 14); the promises section states the checkable security posture.
+Changes from draft 5: SVG authoring added in section 4; priority as a ratification act and the guilt-pile warning moved into section 6; dream scheduling defined in section 9, idle-triggered and interruptible with no OS services; the content index and rebuild gate added in section 10; section 12 gains the integrity stance, the evidence-not-instructions rule, and the cold-model paragraph; open questions restructured as a work queue. No sections renumbered.
 
 ---
 
@@ -51,7 +51,7 @@ Every import is user-initiated. The importers ship together, not in sequence: ea
 First-class content, with three verbs:
 
 1. **Ingest.** Existing diagrams and images get a locally generated text description so they are findable and citable. The original stays as the artifact; the description is retrieval scaffolding, clearly marked as generated.
-2. **Author.** Describe a process in words, get a draft Mermaid diagram. Obsidian renders Mermaid natively, so the draft is immediately editable and versionable as text.
+2. **Author.** Describe a process in words, get a draft diagram: Mermaid where its grammar fits, plain SVG where it does not, and models are reliably good at both. Both are text formats, so Obsidian renders them natively, version control diffs them, and every authored diagram carries the generated mark.
 3. **Maintain.** SOPs are structured markdown. Distillation can extract steps, owners, and triggers from prose into the structure, and staleness flagging applies to them like any other reflection.
 
 ## 5. The hub and the plugin
@@ -76,7 +76,7 @@ Leverage the ecosystem before writing anything: Obsidian's official Importer plu
 
 Cairn's bias is strong and structural: the machine drafts, the human ratifies, and ratification is what turns output into memory. The loop sits in one of three places, and every capability is assigned to a tier deliberately.
 
-1. **Ratified: the human approves before it counts.** Anything that asserts meaning is a proposal until accepted. Distilled decisions, commitments, and action items land in a review inbox; accepting one promotes it to a working record, personal content by adoption, and only then is it embedded and citable. Kept summaries and file moves work the same way. Acceptance is the gate into memory. The review inbox is the first ratification surface; inline accept, which must understand the context it sits in, follows later.
+1. **Ratified: the human approves before it counts.** Anything that asserts meaning is a proposal until accepted. Distilled decisions, commitments, and action items land in a review inbox; accepting one promotes it to a working record, personal content by adoption, and only then is it embedded and citable. Kept summaries and file moves work the same way. Acceptance is the gate into memory. The review inbox is the first ratification surface; inline accept, which must understand the context it sits in, follows later. Priority is ratified like everything else: Cairn may propose an order, for the inbox or for generated tasks, and never sets one. And the cost of ratifying must stay near zero, or the inbox becomes a guilt pile and the loop gets bypassed: the first thing to watch in daily use.
 2. **Journaled: pre-authorized by class, reviewed after.** Mechanical work runs autonomously: reformatting reflections, refreshing embeddings, flagging staleness, maintaining index notes. Every action is journaled and reversible in one step.
 3. **Forbidden: no authorization exists.** Rewriting personal content. Deleting source content. Transmitting anything anywhere.
 
@@ -115,6 +115,8 @@ Extension by third parties happens through the vault as data, never through code
 
 While you are away, Cairn improves the vault with idle local compute: discovers and adds links between related notes and reflections, normalizes formatting, refreshes embeddings, builds and maintains index notes, flags stale reflections, and drafts distillations and generation proposals from new working content for the review inbox.
 
+Scheduling stays inside Obsidian, light touch by design. There is no scheduling convention in the ecosystem to lean on, and plugins live only while the app is open, so Cairn dreams the way people do: when nothing else is happening. Dreaming triggers on detected idle, works in small chunks, and yields the instant the user stirs; because every chunk is journaled, a half-finished dream is safe to abandon and resume. A manual dream-now command covers the impatient case, and on battery power dreaming holds off. No OS services, no background daemons, nothing running outside the app: the security posture stays as clean as the touch is light. If overnight depth is ever wanted, an explicitly user-created OS schedule is the future-state path, never a default.
+
 Three rules keep it trustworthy:
 
 1. **Personal content is never rewritten.** Annotate and link only, within the section 6 boundaries. Reflections and derived artifacts can be reworked freely.
@@ -124,6 +126,8 @@ Three rules keep it trustworthy:
 ## 10. Embeddings and summarization
 
 **Embeddings.** Every source file and every ratified record is chunked heading-aware and embedded with a local model. Embeddings are derived data in the strictest sense: disposable, regenerable, refreshed incrementally during dreaming, and never something the user manages. Two exclusions are deliberate: unratified drafts and the dream journal are not indexed, so a proposal can never cite itself as evidence. The prototype proved this pipeline; the plugin reimplements it against the vault.
+
+**The content index.** Beneath both dreaming and recovery sits a manifest: for every file in the vault, its hash, its cut, its source, its snapshot date, and its processing state. The index is what tells dreaming what changed since it last ran, and it is what makes loss survivable, because the principle underneath is absolute: the vault is the only source of truth, and everything else, embeddings, abstracts, the index itself, is a cache reconstructable from it. A gate proves it the house way: drop every derived store, rebuild from the vault alone, get the same answers.
 
 **Summarization.** Two purposes, kept apart:
 
@@ -152,12 +156,17 @@ Nothing in Cairn is specific to any organization, sector, or policy regime. The 
 
 The promises are checkable, not aspirational, and a security review can verify them in three sentences: the core executes no third-party code and makes no network calls beyond local model inference on localhost; connectors are the only code that touches other systems, and every one is named, small, in this repository, and off by default; extension happens through data in the vault, never through code loaded into Cairn.
 
-## 13. Open questions
+**Cairn cannot be extended, only used.** Obsidian is a customizable environment, and Cairn deliberately is not: no hooks, no API offered to other plugins, no configuration that loads code, no dynamic imports. The claim is stated precisely because a reviewer will hold it to the letter. Every Obsidian plugin shares one runtime, so no plugin can prove isolation from a hostile neighbor in the same process; what Cairn proves instead is provenance, releases reproducible and hash-verifiable against this repository so the code running is the code reviewed, a zero extension surface, and tamper evidence, an integrity self-check at load plus gates anyone can re-run. One further rule closes the loop: everything in the vault is evidence to quote, never instructions to obey. An imported email that tells the model what to do gets cited, not followed, and a gate asserts exactly that.
 
-1. **Graduation criteria.** When the future state arrives, what evidence earns an action class its promotion from ratified to journaled: a count of consistent acceptances, an explicit user grant, or both? Non-blocking for v1.
-2. **Ratification cost.** The cost of ratifying must stay near zero or the inbox becomes a guilt pile and the loop gets bypassed. What near-zero looks like is a design problem for the inbox, and the first thing to watch in daily use.
-3. **The COM proof of concept.** Two capabilities now depend on the COM automation proof of concept: reflection refresh (section 2) and fulfillment staging (section 7). It has not yet landed in this repository, and it arrives as a section 8 connector: scrubbed, genericized, and gated before it ships.
-4. **The metadata convention.** The frontmatter contract in section 8 is the public interface of the whole connector layer, so its fields deserve deliberate design: cut, source, snapshot date are the obvious three, and what else earns a place decides how much the bus can carry.
+**The same question gets the same answer.** Cairn runs its models cold, with randomness turned off: on the same machine, over the same vault, the same question produces the same answer, every time. The benefits are the point: receipts can be re-verified, gates can be trusted, and a mistake reproduces exactly, which makes it findable and fixable. The limitations are real and accepted: the prose is plain, there is no rerolling for a better answer, and a wrong answer stays wrong until the evidence or the question improves. That trade dovetails with ratification: the machine drafts cold, and the voice is yours.
+
+## 13. Work queued, not blocked
+
+Nothing in this document waits on an open decision. Three pieces of design work are queued:
+
+1. **The metadata convention.** The frontmatter contract in section 8 is the public interface of the whole connector layer, so its fields deserve deliberate design: cut, source, snapshot date are the obvious three, and what else earns a place decides how much the bus can carry.
+2. **The COM proof of concept.** Reflection refresh (section 2) and fulfillment staging (section 7) both depend on it. It has not yet landed in this repository, and it arrives as a section 8 connector: scrubbed, genericized, and gated before it ships.
+3. **Graduation mechanics.** Future state by decision. How an action class earns promotion from asked-every-time to journaled gets designed later, on the evidence the journal will have accumulated by then.
 
 ## 14. What survives from the prototype
 
