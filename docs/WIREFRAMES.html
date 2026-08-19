@@ -1,0 +1,2098 @@
+<!-- Cairn UX drawing set, draft 3. Numbered for markup.
+     Reviewable by numbered note: cite the plate letter and the key number, for example B4.
+     This file is a page fragment by design: it opens directly in any browser and it diffs as text. -->
+<title>Cairn UX Drawing Set, Draft 1</title>
+
+<style>
+  /* ---------- tokens ---------- */
+  :root {
+    --paper:      #EDEFEB;
+    --plate:      #F8F9F6;
+    --sunk:       #E4E7E1;
+    --ink:        #191D1A;
+    --ink-2:      #4E5751;
+    --ink-3:      #7B857D;
+    --rule:       #C6CDC5;
+    --rule-2:     #DCE0D8;
+    --redline:    #A93A2C;
+    --redline-bg: rgba(169, 58, 44, 0.09);
+    --strong:     #2E6A4C;
+    --weak:       #8E6318;
+    --lo:         #9C4633;
+    --slate:      #3C5C75;
+    --shadow:     0 1px 0 rgba(25, 29, 26, 0.05);
+
+    --face-draft: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --face-read:  Charter, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --face-ui:    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
+
+    --gap: clamp(1.5rem, 3vw, 2.75rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #121614;
+      --plate:      #191E1B;
+      --sunk:       #101412;
+      --ink:        #E7EAE4;
+      --ink-2:      #A7B0A9;
+      --ink-3:      #79837B;
+      --rule:       #333B36;
+      --rule-2:     #252B27;
+      --redline:    #E4735E;
+      --redline-bg: rgba(228, 115, 94, 0.13);
+      --strong:     #6FB392;
+      --weak:       #C79A4A;
+      --lo:         #CE7E68;
+      --slate:      #83A9C5;
+      --shadow:     0 1px 0 rgba(0, 0, 0, 0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #121614;
+    --plate:      #191E1B;
+    --sunk:       #101412;
+    --ink:        #E7EAE4;
+    --ink-2:      #A7B0A9;
+    --ink-3:      #79837B;
+    --rule:       #333B36;
+    --rule-2:     #252B27;
+    --redline:    #E4735E;
+    --redline-bg: rgba(228, 115, 94, 0.13);
+    --strong:     #6FB392;
+    --weak:       #C79A4A;
+    --lo:         #CE7E68;
+    --slate:      #83A9C5;
+    --shadow:     0 1px 0 rgba(0, 0, 0, 0.4);
+  }
+  :root[data-theme="light"] {
+    --paper:      #EDEFEB;
+    --plate:      #F8F9F6;
+    --sunk:       #E4E7E1;
+    --ink:        #191D1A;
+    --ink-2:      #4E5751;
+    --ink-3:      #7B857D;
+    --rule:       #C6CDC5;
+    --rule-2:     #DCE0D8;
+    --redline:    #A93A2C;
+    --redline-bg: rgba(169, 58, 44, 0.09);
+    --strong:     #2E6A4C;
+    --weak:       #8E6318;
+    --lo:         #9C4633;
+    --slate:      #3C5C75;
+    --shadow:     0 1px 0 rgba(25, 29, 26, 0.05);
+  }
+
+  /* ---------- ground ---------- */
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--face-read);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1rem, 4vw, 3rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+  p { margin: 0 0 0.9em; max-width: 68ch; }
+  p:last-child { margin-bottom: 0; }
+  a { color: var(--redline); }
+  :focus-visible { outline: 2px solid var(--redline); outline-offset: 2px; }
+
+  /* ---------- masthead ---------- */
+  .mast {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 1.5rem;
+  }
+  .mast-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .eyebrow {
+    font-family: var(--face-draft);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  h1 {
+    font-family: var(--face-read);
+    font-size: clamp(2rem, 5vw, 3.1rem);
+    line-height: 1.08;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .lede { font-size: 1.08rem; color: var(--ink-2); max-width: 62ch; }
+
+  /* ---------- how to review ---------- */
+  .brief {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+  .brief > div {
+    background: var(--plate);
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .brief h3 {
+    margin: 0;
+    font-family: var(--face-draft);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--redline);
+    font-weight: 500;
+  }
+  .brief p { font-size: 0.94rem; color: var(--ink-2); margin: 0; }
+
+  /* ---------- plates ---------- */
+  .plate {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+  }
+  .plate-head { display: flex; flex-direction: column; gap: 0.45rem; }
+  .plate-head .eyebrow { color: var(--redline); }
+  .plate-head h2 {
+    margin: 0;
+    font-size: clamp(1.5rem, 3vw, 2.05rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+  .plate-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 22rem);
+    gap: 1.6rem;
+    align-items: start;
+  }
+  @media (max-width: 940px) {
+    .plate-body { grid-template-columns: minmax(0, 1fr); }
+  }
+  .draw { display: flex; flex-direction: column; gap: 1.4rem; min-width: 0; }
+
+  /* ---------- annotation column ---------- */
+  .notes {
+    border-left: 2px solid var(--redline);
+    padding-left: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    font-size: 0.94rem;
+  }
+  .notes .eyebrow { color: var(--redline); }
+  .note { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); gap: 0.55rem; }
+  .note span { color: var(--ink-2); }
+  .key {
+    font-family: var(--face-draft);
+    font-size: 0.68rem;
+    font-weight: 700;
+    font-style: normal;
+    color: var(--redline);
+    background: var(--redline-bg);
+    border: 1px solid var(--redline);
+    border-radius: 999px;
+    width: 1.35rem;
+    height: 1.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    line-height: 1;
+    vertical-align: 0.1em;
+  }
+  sup.key { margin-left: 0.25rem; }
+  .new {
+    font-family: var(--face-draft);
+    font-style: normal;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--redline);
+    border: 1px dashed var(--redline);
+    padding: 0.1rem 0.3rem;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+
+  /* ---------- frames ---------- */
+  .scroll { overflow-x: auto; padding-bottom: 0.4rem; }
+  .frame {
+    background: var(--plate);
+    border: 1px solid var(--rule);
+    box-shadow: var(--shadow);
+    font-family: var(--face-ui);
+    font-size: 0.86rem;
+    line-height: 1.5;
+    min-width: 480px;
+  }
+  .frame-cap {
+    font-family: var(--face-draft);
+    font-size: 0.68rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-top: 0.5rem;
+  }
+  .win-chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--rule);
+    background: var(--sunk);
+    font-family: var(--face-draft);
+    font-size: 0.68rem;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--rule); flex: none; }
+  .win-cols { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) 17rem; }
+  .win-cols > * { padding: 0.8rem 0.9rem; border-right: 1px solid var(--rule-2); min-width: 0; }
+  .win-cols > *:last-child { border-right: 0; }
+  .col-rail, .col-main { color: var(--ink-3); }
+  .col-rail ul { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+  .col-side { background: var(--plate); border-left: 1px solid var(--rule); color: var(--ink); }
+  .ghost { color: var(--ink-3); }
+  .ghost-lines { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.6rem; }
+  .ghost-lines i { display: block; height: 6px; background: var(--rule-2); border-radius: 1px; }
+
+  .pane-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--face-draft);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .pane-body { padding: 0.95rem; display: flex; flex-direction: column; gap: 0.85rem; }
+  .pane-foot {
+    padding: 0.6rem 0.85rem;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    color: var(--ink-3);
+    font-size: 0.78rem;
+  }
+
+  .qline {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .qline b { font-family: var(--face-draft); color: var(--ink-3); font-weight: 500; flex: none; }
+  .answer { color: var(--ink); }
+  .answer p { max-width: none; margin: 0 0 0.6em; }
+  .cite {
+    font-family: var(--face-draft);
+    font-size: 0.75rem;
+    color: var(--redline);
+    background: var(--redline-bg);
+    border-radius: 2px;
+    padding: 0 0.18rem;
+    text-decoration: none;
+    border-bottom: 1px solid var(--redline);
+  }
+  .caret {
+    display: inline-block;
+    width: 0.5rem;
+    height: 1rem;
+    background: var(--ink);
+    vertical-align: -0.15rem;
+    animation: blink 1.05s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .caret { animation: none; opacity: 0.5; } }
+
+  .receipt {
+    border-left: 2px solid var(--rule);
+    padding: 0.6rem 0 0.6rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-family: var(--face-draft);
+    font-size: 0.75rem;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  .receipt-head {
+    font-size: 0.65rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .src { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: 0.4rem; }
+  .src em { font-style: normal; color: var(--ink-3); }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: var(--face-draft);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .chip.strong { color: var(--strong); }
+  .chip.mod { color: var(--weak); }
+  .chip.weak { color: var(--lo); }
+  .chip.none { color: var(--ink-3); }
+  .chip.refl { color: var(--slate); }
+  .chip.gen { color: var(--ink-3); border-style: dashed; }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .chip.gen::before, .chip.none::before { background: none; border: 1px solid currentColor; }
+
+  /* provenance stamps: uppercase, no dot, never on a row with a confidence chip */
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--face-draft);
+    font-size: 0.6rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0.18rem 0.5rem;
+    border: 1px solid var(--ink-3);
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .stamp.refl { border-color: var(--slate); color: var(--slate); }
+
+  .menu {
+    border: 1px solid var(--rule);
+    background: var(--plate);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    min-width: 15rem;
+    font-size: 0.82rem;
+  }
+  .menu > span { padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--rule-2); display: flex; justify-content: space-between; gap: 1rem; }
+  .menu > span:last-child { border-bottom: 0; }
+  .menu .on { background: var(--sunk); color: var(--ink); }
+  .menu .mono { font-family: var(--face-draft); font-size: 0.68rem; color: var(--ink-3); }
+
+  .notice {
+    border: 1px solid var(--rule);
+    background: var(--sunk);
+    box-shadow: var(--shadow);
+    padding: 0.5rem 0.7rem;
+    font-size: 0.78rem;
+    color: var(--ink-2);
+    max-width: 21rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .setrow { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--rule-2); }
+  .setrow:last-child { border-bottom: 0; }
+  .setrow p { margin: 0; font-size: 0.78rem; color: var(--ink-3); max-width: 36ch; }
+  .setrow b { font-weight: 600; font-size: 0.84rem; color: var(--ink); }
+  .tog {
+    font-family: var(--face-draft);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid var(--rule);
+    padding: 0.15rem 0.5rem;
+    color: var(--ink-3);
+    flex: none;
+  }
+  .tog.on { border-color: var(--strong); color: var(--strong); }
+  .ico { width: 13px; height: 13px; border: 1px solid var(--rule); border-radius: 3px; display: inline-block; flex: none; }
+  .ico.mine { border-color: var(--redline); }
+
+  .btn {
+    font-family: var(--face-ui);
+    font-size: 0.78rem;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--sunk);
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .btn.prim { border-color: var(--ink-2); color: var(--ink); }
+  .kbd {
+    font-family: var(--face-draft);
+    font-size: 0.68rem;
+    border: 1px solid var(--rule);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 0.05rem 0.3rem;
+    color: var(--ink-2);
+    background: var(--sunk);
+  }
+
+  .stack { display: flex; flex-direction: column; gap: 0.5rem; }
+  .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1rem; align-items: start; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; align-items: start; }
+  .grid-2 .frame, .grid-3 .frame { min-width: 0; }
+
+  /* ---------- test strip ---------- */
+  .test {
+    border: 1px solid var(--ink);
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    background: transparent;
+  }
+  .test .eyebrow { color: var(--ink); }
+  .test p { font-size: 0.95rem; margin: 0; color: var(--ink-2); max-width: 78ch; }
+
+  /* ---------- key plate bits ---------- */
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .legend > div { background: var(--plate); padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .legend h4 { margin: 0; font-family: var(--face-draft); font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; }
+  .legend p { margin: 0; font-size: 0.88rem; color: var(--ink-2); }
+  .sw { display: inline-block; width: 1.1rem; height: 1.1rem; flex: none; vertical-align: -0.2rem; }
+  .sw-personal { background: var(--ink); }
+  .sw-reflection {
+    border: 1px solid var(--slate);
+    background-image: repeating-linear-gradient(45deg, var(--slate) 0 1px, transparent 1px 4px);
+  }
+  .sw-derived { border: 1px dashed var(--ink-3); }
+  .defn { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); gap: 0.55rem; align-items: start; font-size: 0.88rem; color: var(--ink-2); }
+
+  /* ---------- absence plate ---------- */
+  .absent { position: relative; opacity: 0.72; }
+  .absent .frame { border-style: dashed; }
+  .strike {
+    font-family: var(--face-draft);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--redline);
+    border: 1px solid var(--redline);
+    padding: 0.2rem 0.5rem;
+    display: inline-block;
+    margin-bottom: 0.5rem;
+  }
+
+  /* ---------- closing ---------- */
+  .queue { border: 1px solid var(--rule); background: var(--plate); }
+  .queue > div { padding: 0.85rem 1rem; border-bottom: 1px solid var(--rule-2); display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: 0.8rem; align-items: start; }
+  .queue > div:last-child { border-bottom: 0; }
+  .queue b { font-family: var(--face-draft); font-size: 0.7rem; color: var(--redline); letter-spacing: 0.08em; }
+  .queue p { margin: 0; font-size: 0.93rem; color: var(--ink-2); }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /* ---------- plate H: the shell ---------- */
+  .shell {
+    width: 100%;
+    max-width: 740px;
+    aspect-ratio: 4 / 3;
+    box-sizing: border-box;
+    border: 1px solid var(--ink);
+    background: var(--plate);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--face-ui);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+  .shell.mini { aspect-ratio: 10 / 3; }
+  .shell-bar, .shell-status {
+    flex: none;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0 0.6rem;
+    background: var(--sunk);
+    color: var(--ink-3);
+    font-family: var(--face-draft);
+    font-size: 0.62rem;
+    letter-spacing: 0.05em;
+  }
+  .shell-bar { height: 30px; border-bottom: 1px solid var(--rule); }
+  .shell-status { height: 22px; border-top: 1px solid var(--rule); }
+  .shell-mid { flex: 1; display: flex; min-height: 0; }
+  .z {
+    box-sizing: border-box;
+    min-width: 0;
+    border-right: 1px solid var(--rule-2);
+    padding: 0.55rem 0.65rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    color: var(--ink-3);
+  }
+  .z:last-child { border-right: 0; }
+  .z .dim {
+    font-family: var(--face-draft);
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.4rem;
+    color: var(--ink-3);
+  }
+  .z.cairn { color: var(--ink); box-shadow: inset 2px 0 0 var(--redline); }
+  .z.cairn .dim { color: var(--redline); }
+  .z.rib { flex: 0 0 4.5%; padding: 0.5rem 0; align-items: center; gap: 0.5rem; }
+  .z.rib i { width: 13px; height: 13px; border: 1px solid var(--rule); border-radius: 3px; flex: none; }
+  .z.rib i.mine { border-color: var(--redline); }
+  .z p { margin: 0; font-size: 0.74rem; max-width: none; }
+  .tabstrip {
+    display: flex;
+    gap: 2px;
+    font-family: var(--face-draft);
+    font-size: 0.58rem;
+    letter-spacing: 0.05em;
+    color: var(--ink-3);
+  }
+  .tabstrip span { padding: 0.12rem 0.5rem; border: 1px solid var(--rule-2); border-bottom: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tabstrip .on { color: var(--ink); border-color: var(--rule); background: var(--paper); }
+  .focus { width: 100%; max-width: 38ch; margin: 0.5rem auto 0; display: flex; flex-direction: column; gap: 0.55rem; min-height: 0; }
+  .statusitem { color: var(--redline); font-family: var(--face-draft); }
+
+  /* ---------- plate H: flow map ---------- */
+  .flow { width: 100%; height: auto; min-width: 720px; display: block; }
+  .flow rect { fill: var(--plate); }
+  .flow .native > rect { stroke: var(--rule); stroke-width: 1; }
+  .flow .own > rect { stroke: var(--ink); stroke-width: 1.5; }
+  .flow .out > rect { stroke: var(--redline); stroke-width: 1; stroke-dasharray: 5 4; }
+  .flow text { font-family: var(--face-ui); font-size: 13px; fill: var(--ink); }
+  .flow .native text { fill: var(--ink-3); }
+  .flow .out text { fill: var(--redline); }
+  .flow .lbl { font-family: var(--face-draft); font-size: 10px; fill: var(--ink-3); letter-spacing: 0.05em; }
+  .flow .edge { stroke: var(--ink-2); stroke-width: 1.2; fill: none; }
+  .flow .ret { stroke-dasharray: 4 3; }
+  .flow .stop { stroke: var(--redline); stroke-width: 3.5; }
+  .flow-key { display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem; font-family: var(--face-draft); font-size: 0.68rem; color: var(--ink-3); letter-spacing: 0.04em; }
+  .flow-key span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .flow-key i { width: 1.1rem; height: 0.75rem; display: inline-block; flex: none; }
+  .fk-native { border: 1px solid var(--rule); }
+  .fk-own { border: 1.5px solid var(--ink); }
+  .fk-out { border: 1px dashed var(--redline); }
+
+  /* ---------- plate K: the control table ---------- */
+  table.ktab {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 640px;
+    background: var(--plate);
+    border: 1px solid var(--rule);
+    font-size: 0.82rem;
+    font-family: var(--face-ui);
+  }
+  .ktab th {
+    font-family: var(--face-draft);
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-align: left;
+    padding: 0.45rem 0.7rem;
+    border-bottom: 1px solid var(--rule);
+    font-weight: 500;
+  }
+  .ktab td {
+    padding: 0.4rem 0.7rem;
+    border-bottom: 1px solid var(--rule-2);
+    vertical-align: top;
+    color: var(--ink-2);
+  }
+  .ktab tr:last-child td { border-bottom: 0; }
+  .ktab td:first-child { white-space: nowrap; color: var(--ink-3); }
+  .ktab td.kgroup {
+    font-family: var(--face-draft);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--redline);
+    background: var(--sunk);
+    padding: 0.3rem 0.7rem;
+  }
+  .ktab .kbd { white-space: nowrap; }
+</style>
+
+<div class="wrap">
+
+  <!-- ============ MASTHEAD ============ -->
+  <header class="mast">
+    <div class="mast-row">
+      <span class="eyebrow">Cairn / drawing set / draft 3</span>
+      <span class="eyebrow tnum">2026-08-18 &nbsp;·&nbsp; twelve plates</span>
+    </div>
+    <h1>The surface, drawn before the engine.</h1>
+    <p class="lede">Three surfaces carry five capabilities. If they cannot make the four daily journeys feel simple,
+      the plugin has failed before any code exists, which is the cheapest possible place to fail. Everything here is
+      a proposal. Nothing here is built.</p>
+    <p class="lede" style="font-size:0.95rem">Changes from draft 2: integration moves to arrival, on one work queue
+      that dreaming drains at idle and Dream now drains on demand, blocking, with progress; the vault ratified as
+      the whole integration boundary, daily notes included; import reports and the task ledger drawn as notes;
+      export cut to Markdown; the yield wording made plain; two instruments killed; Plate K, navigation and
+      nothing else; and Plate L, the ecosystem drawn as data.</p>
+  </header>
+
+  <section class="brief" aria-label="How to review this document">
+    <div>
+      <h3>How to review</h3>
+      <p>Numbered notes, plate letter plus key number. B4 is the fourth annotation on the Ask plate. A kill note kills it.</p>
+    </div>
+    <div>
+      <h3>What is transcribed</h3>
+      <p>Unmarked annotations restate a journey or a thesis rule already ratified. Arguing with those is arguing with the thesis.</p>
+    </div>
+    <div>
+      <h3>What is proposed</h3>
+      <p>Anything carrying <i class="new">new</i> is invented here rather than transcribed. All are listed at the foot, with the ones already ratified marked.</p>
+    </div>
+    <div>
+      <h3>What is missing</h3>
+      <p>No colors, no icon set, no type choices for the plugin itself. Layout and behavior only, so the argument stays about the journey.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE A ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate A</span>
+      <h2>The key</h2>
+      <p class="lede">Six marks appear on every plate that follows. They are the product's vocabulary made visible,
+        and each one exists because a thesis rule needs a place to show itself on screen.</p>
+    </div>
+
+    <div class="legend">
+      <div>
+        <h4>The cut</h4>
+        <p><span class="sw sw-personal"></span> <b>Personal.</b> Yours, current, irreplaceable. Never rewritten, only annotated.</p>
+        <p><span class="sw sw-reflection"></span> <b>Reflection.</b> A snapshot of something that lives elsewhere. Always cited with its date.</p>
+        <p><span class="sw sw-derived"></span> <b>Derived.</b> Summaries, descriptions, embeddings. Regenerable, never a source of truth.</p>
+      </div>
+      <div>
+        <h4>Confidence, three levels</h4>
+        <p class="row"><span class="chip strong">Strong</span> <span class="chip mod">Moderate</span> <span class="chip weak">Weak</span></p>
+        <p class="row"><span class="chip none">Retrieval not run</span></p>
+        <p>A fact about this answer, right now, and it dies with the answer. A chip with a dot always means
+          confidence and never anything else. Shown before the prose finishes, so belief is never invested ahead
+          of the evidence.</p>
+      </div>
+      <div>
+        <h4>Provenance</h4>
+        <p class="row"><span class="stamp">Generated</span> <span class="stamp">Ratified 2026-08-14</span></p>
+        <p class="row"><span class="stamp refl">Snapshot 2026-05-02</span></p>
+        <p>A fact about an artifact, forever, and it never washes out. Stamps never share a row with confidence
+          chips, so the two facts can never be read as one.</p>
+      </div>
+      <div>
+        <h4>The three tiers</h4>
+        <p><b>Ratified.</b> Asks every time. Anything that asserts meaning.</p>
+        <p><b>Journaled.</b> Acts, then shows its work. Mechanical upkeep only.</p>
+        <p><b>Forbidden.</b> No affordance exists anywhere in the interface.</p>
+      </div>
+      <div>
+        <h4>Verbs, not chrome</h4>
+        <p>Cairn adds three panes and a handful of commands. Everything else is Obsidian's own idiom: the palette,
+          drag and drop, context menus.</p>
+        <p class="row"><span class="kbd">Ctrl</span> <span class="kbd">Cmd</span> <span class="ghost">shown per platform, never hard coded</span></p>
+      </div>
+      <div>
+        <h4>Cross platform<span class="new">new</span></h4>
+        <p>Windows, Linux, and macOS are equal targets, so no screen names a mechanism only one of them has.
+          Modifier keys render per platform, paths render in the platform's own form, and every connector affordance
+          has a plain file path behind it.</p>
+      </div>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>Someone who has read nothing but this plate can look at any later plate and say, for any element on it,
+        which cut it belongs to, whether it is a proposal or a record, and whether Cairn may touch it unattended.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE B ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate B / journey: Ask, daily</span>
+      <h2>The chat pane</h2>
+      <p class="lede">Mid-work a question surfaces: what did we decide about the exception process. The old way is
+        five minutes of searching or an interruption of a colleague. This pane exists to catch that reflex.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+
+        <div>
+          <div class="scroll">
+            <div class="frame">
+              <div class="win-chrome">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                <span>Obsidian &nbsp;/&nbsp; Vault</span>
+              </div>
+              <div class="win-cols">
+                <div class="col-rail ghost">
+                  <span class="eyebrow">Files</span>
+                  <ul>
+                    <li>Meetings/</li>
+                    <li>Policies/</li>
+                    <li>Projects/</li>
+                    <li>Inbox/</li>
+                  </ul>
+                </div>
+                <div class="col-main ghost">
+                  <span class="eyebrow">Note in progress</span>
+                  <div class="ghost-lines">
+                    <i></i><i style="width:82%"></i><i style="width:91%"></i><i style="width:64%"></i><i style="width:88%"></i>
+                  </div>
+                </div>
+                <div class="col-side">
+                  <div class="row" style="justify-content:space-between">
+                    <span class="eyebrow">Cairn</span>
+                    <span class="kbd">Ctrl K</span>
+                  </div>
+                  <div class="ghost-lines">
+                    <i style="width:70%"></i><i></i><i style="width:85%"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="frame-cap">B.1 &nbsp; Location. The pane is a right sidebar leaf, so the note stays open beside it.</div>
+        </div>
+
+        <div>
+          <div class="scroll">
+            <div class="frame">
+              <div class="pane-head">
+                <span>Cairn &nbsp;·&nbsp; Ask</span>
+                <span class="row"><span class="btn">Clear</span></span>
+              </div>
+              <div class="pane-body">
+                <div class="qline"><b>You</b><span>What did we decide about the exception process?<sup class="key">1</sup></span></div>
+
+                <div class="row">
+                  <span class="chip strong">Strong 0.742</span><sup class="key">2</sup>
+                  <span class="ghost" style="font-size:0.78rem">3 passages, 2 sources</span>
+                </div>
+
+                <div class="answer">
+                  <p>Exceptions are approved by the service owner, not the architecture group, and every approved
+                    exception carries an expiry date <a class="cite" href="#" onclick="return false">[1]</a>. The
+                    review cadence was set at quarterly <a class="cite" href="#" onclick="return false">[2]</a>, and
+                    an exception that reaches its expiry without renewal reverts to the standard
+                    <a class="cite" href="#" onclick="return false">[3]</a>.<span class="caret"></span></p>
+                </div>
+
+                <div class="receipt">
+                  <span class="receipt-head">Receipt<sup class="key">3</sup></span>
+                  <div class="src"><em>[1]</em><span>Meetings / 2026-07-14 planning.md &nbsp;<span class="sw sw-personal" style="width:.55rem;height:.55rem"></span> personal &middot; <span class="ghost">linked from this note</span><sup class="key">10</sup></span></div>
+                  <div class="src"><em>[2]</em><span>Meetings / 2026-07-14 planning.md &nbsp;<span class="sw sw-personal" style="width:.55rem;height:.55rem"></span> personal &middot; <span class="ghost">text match</span></span></div>
+                  <div class="src"><em>[3]</em><span>Policies / Exception Handling SOP.md &nbsp;<span class="stamp refl">Snapshot 2026-05-02</span><sup class="key">4</sup> &middot; <span class="ghost">semantic</span></span></div>
+                </div>
+              </div>
+              <div class="pane-foot">
+                <span class="ghost">Ephemeral. Asked again tomorrow, it regenerates from current evidence.</span>
+                <span class="btn" style="margin-left:auto">Keep &#9662;<sup class="key">5</sup></span>
+              </div>
+            </div>
+          </div>
+          <div class="frame-cap">B.2 &nbsp; Detail. Mid-stream: the strength label is already final while the prose is still arriving.</div>
+        </div>
+
+        <div class="grid-3">
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Refusal</span></div>
+              <div class="pane-body">
+                <div class="qline"><b>You</b><span>What is next quarter's budget?</span></div>
+                <div class="row"><span class="chip none">Retrieval ran, nothing near</span></div>
+                <div class="answer"><p>The vault does not contain the answer to this question.<sup class="key">6</sup></p></div>
+                <div class="receipt">
+                  <span class="receipt-head">Nearest headings found</span>
+                  <div class="src"><em>·</em><span>Projects / Intake / Cost notes.md</span></div>
+                  <div class="src"><em>·</em><span>Policies / Procurement SOP.md</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="frame-cap">B.3 &nbsp; Under one second. A dead end that is still a trail marker.</div>
+          </div>
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>On topic, silent</span></div>
+              <div class="pane-body">
+                <div class="qline"><b>You</b><span>Who signed off the exception in March?</span></div>
+                <div class="row"><span class="chip strong">Strong 0.688</span></div>
+                <div class="answer"><p>The saved material does not name who signed off in March. It covers the
+                  approval route <a class="cite" href="#" onclick="return false">[1]</a> and the expiry rule
+                  <a class="cite" href="#" onclick="return false">[2]</a>, and neither records individual
+                  approvals.<sup class="key">7</sup></p></div>
+              </div>
+            </div>
+            <div class="frame-cap">B.4 &nbsp; Three sentences at most, no speculation, not the refusal sentence.</div>
+          </div>
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Weak retrieval</span></div>
+              <div class="pane-body">
+                <div class="qline"><b>You</b><span>How do we handle vendor escalations?</span></div>
+                <div class="row"><span class="chip weak">Weak 0.318</span><sup class="key">8</sup></div>
+                <div class="answer"><p>One passage touches escalation, in a procurement context
+                  <a class="cite" href="#" onclick="return false">[1]</a>. Treat this as a lead rather than an
+                  answer.</p></div>
+              </div>
+            </div>
+            <div class="frame-cap">B.5 &nbsp; The label does the warning. The prose does not apologize.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>One keystroke from anywhere, focus already in the input. Palette command carries the same verb for people who never learn hotkeys.</span></div>
+        <div class="note"><span class="key">2</span><span>Strength is computed before generation starts, so it renders first and never moves. Reading it late is reading it too late.</span></div>
+        <div class="note"><span class="key">3</span><span>The receipt is part of the answer, not a disclosure panel. No receipt, no answer, including when retrieval was not run.</span></div>
+        <div class="note"><span class="key">4</span><span>A reflection citation carries its snapshot date inline. Clicking any citation opens the source at the cited passage in a split, without losing the conversation.</span></div>
+        <div class="note"><span class="key">5</span><span>Demoted in review: policy content moves, so a kept answer is a claim frozen against a moving source, and cold models make asking again free. Keep is a quiet menu, drawn on Plate J, holding save as note and export.</span></div>
+        <div class="note"><span class="key">6</span><span>The refusal is one sentence, asserted by equality rather than containment, because a narrated refusal reads as hedging.</span></div>
+        <div class="note"><span class="key">7</span><span>The third case is neither answer nor refusal. Without a shape of its own the model improvised and invented a passage number once already.</span></div>
+        <div class="note"><span class="key">8</span><span>Weak still gets an answer. Only the no-hope floor skips generation entirely, and that is the refusal above.</span></div>
+        <div class="note"><span class="key">9</span><span>Ratified with a clarification from review: the pane keeps the whole session on screen, so earlier questions and answers stay visible as context for the reader. Only the engine ignores them; each question retrieves from scratch until multi-turn lands as its own tracked slice.</span></div>
+        <div class="note"><span class="key">10</span><span><i class="new">new</i> Retrieval is more than one method: vault links, text match, and semantic similarity each count, and every citation names how it was found. A passage the user linked deliberately is stronger evidence than one that merely sits nearby in vector space, and the confidence level summarizes agreement between methods.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>From anywhere in Obsidian to a submitted question in two actions. From answer to the cited passage in one.
+        A refusal arrives in under a second on fixture timing. Watched once, unaided.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE C ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate C / journey: Capture, daily</span>
+      <h2>Arrival</h2>
+      <p class="lede">Something crossed the desk: a policy document, an emailed decision, a meeting invitation, a
+        diagram. It should land in the vault, correctly classified, without ceremony. Writing a note is already
+        capture and involves Cairn not at all.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+        <div class="grid-2">
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Import report</span><span class="btn">Dismiss</span></div>
+              <div class="pane-body">
+                <div class="stack">
+                  <div class="row" style="justify-content:space-between">
+                    <span><b>4 files</b> converted<sup class="key">1</sup></span>
+                    <span class="ghost tnum">2.4s</span>
+                  </div>
+                  <div class="src"><em>·</em><span>Accessibility Standard.pdf &nbsp;<span class="ghost">42 chunks, embedded, 3 links added, original kept</span><sup class="key">2</sup></span></div>
+                  <div class="src"><em>·</em><span>Vendor list.xlsx &nbsp;<span class="ghost">table, 18 rows</span></span></div>
+                  <div class="src"><em>·</em><span>Intake flow.png &nbsp;<span class="chip gen">description generated</span><sup class="key">3</sup></span></div>
+                  <div class="src" style="color:var(--redline)"><em>!</em><span>Q3 draft.docx &nbsp;<span>failed: file is password protected. Remove the password and drop it again.</span><sup class="key">4</sup></span></div>
+                </div>
+              </div>
+              <div class="pane-foot"><span class="row"><span class="chip refl">3 need a cut</span> <span class="btn prim">Open inbox</span></span></div>
+            </div>
+            <div class="frame-cap">C.1 &nbsp; Conversion is visible. Silence is never the success signal.</div>
+          </div>
+
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Arrival, three ways, one queue</span></div>
+              <div class="pane-body">
+                <div class="stack">
+                  <div class="src"><em>1</em><span>Drop a file. Obsidian's own drop, anywhere.</span></div>
+                  <div class="src"><em>2</em><span>Type. Any note is capture, daily notes included.</span></div>
+                  <div class="src"><em>3</em><span>Anything else that writes the vault: another plugin, a sync.</span></div>
+                </div>
+                <p class="ghost" style="font-size:0.8rem;margin:0">All three land on the same queue the moment they
+                  arrive: convert if needed, embed, add links under the journal, ask for a cut when the source does
+                  not say.<sup class="key">5</sup> Classification never interrupts; it waits in the
+                  inbox.<sup class="key">6</sup></p>
+              </div>
+            </div>
+            <div class="frame-cap">C.2 &nbsp; The vault is the boundary. Integration starts on arrival and never
+              waits for idle.</div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>A report that fits in a glance and still names every failure by file name. The user can always answer "did it work" without opening a log.</span></div>
+        <div class="note"><span class="key">2</span><span>The original is kept beside its converted markdown as the artifact. Conversion is additive, never a replacement.</span></div>
+        <div class="note"><span class="key">3</span><span>Images get a locally generated description so they are findable and citable. The description is scaffolding and never appears in a receipt.</span></div>
+        <div class="note"><span class="key">4</span><span>Every failure names its one fix. An error code is a defect in this surface.</span></div>
+        <div class="note"><span class="key">5</span><span>Resolved in review: the vault is the integration boundary, the whole thing. Obsidian raises in-app events when vault files change, and acting on them is not ambient collection, because everything in the vault is there by the user's own act. The promise governs what may enter the vault; nothing outside it is ever watched. Links are the product's core value, so they land on arrival, journaled, not at the next idle.</span></div>
+        <div class="note"><span class="key">6</span><span>Arrivals carrying convention frontmatter are classified on arrival and shown as classified. Everything else lands unclassified, which is the inbox doing double duty.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>File to classified, searchable vault content in three actions or fewer. A deliberately corrupt file produces
+        a named failure, not silence. A line typed into today's daily note is findable by Ask with no further action
+        by the user.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE D ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate D / journey: Ratify, daily</span>
+      <h2>The inbox</h2>
+      <p class="lede">Cairn has been reading what arrived and has proposals. None of it is memory yet, and that is
+        the point. If ratifying is not close to free, this surface becomes a guilt pile and the whole loop gets
+        bypassed, which is the first kill criterion this project wrote down.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+        <div>
+          <div class="scroll">
+            <div class="frame">
+              <div class="pane-head">
+                <span>Cairn &nbsp;·&nbsp; Inbox &nbsp;<span class="tnum">4</span><sup class="key">1</sup></span>
+                <span class="row"><span class="kbd">A</span> accept <span class="kbd">R</span> reject <span class="kbd">E</span> edit <span class="kbd">J</span><span class="kbd">K</span> move<sup class="key">2</sup></span>
+              </div>
+              <div class="pane-body">
+                <div class="row" style="justify-content:space-between">
+                  <span class="eyebrow tnum">1 of 4 &middot; newest first</span>
+                  <span class="stamp">Generated</span>
+                </div>
+                <p style="margin:0"><b>Commitment.</b> Publish the revised exception register before the end of
+                  the month. Owner: you. Due 2026-08-31.</p>
+                <div class="row">
+                  <span class="ghost" style="font-size:0.78rem">Suggested priority</span>
+                  <span class="btn">Normal</span>
+                  <span class="ghost" style="font-size:0.78rem">adjustable, not applied<sup class="key">4</sup></span>
+                </div>
+                <div class="receipt">
+                  <span class="receipt-head">The evidence that produced it<sup class="key">5</sup></span>
+                  <span style="font-family:var(--face-ui);color:var(--ink)">"...agreed the register needs to be
+                    out before month end, and that sits with me."</span>
+                  <div class="src"><em>·</em><span>Meetings / 2026-08-17 planning.md, line 34 &nbsp;<span class="sw sw-personal" style="width:.55rem;height:.55rem"></span></span></div>
+                </div>
+                <p class="ghost" style="margin:0;font-size:0.8rem">Behind this one: a task from an email, an
+                  unclassified arrival, and a proposed move of 3 notes.<sup class="key">3</sup></p>
+              </div>
+              <div class="pane-foot">
+                <span class="ghost">Rejected proposals are remembered as rejected and do not return.<sup class="key">6</sup></span>
+              </div>
+            </div>
+          </div>
+          <div class="frame-cap">D.1 &nbsp; One proposal in focus, its evidence beneath it, the rest behind it.
+            Redrawn to the one-view rule ratified on Plate H.</div>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Empty</span></div>
+              <div class="pane-body">
+                <p style="margin:0">Nothing waiting.<sup class="key">8</sup></p>
+                <p class="ghost" style="margin:0;font-size:0.82rem">Last accepted 11 minutes ago.</p>
+              </div>
+            </div>
+            <div class="frame-cap">D.2 &nbsp; Empty is the normal state, not an achievement. No celebration, no badge.</div>
+          </div>
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Accept with edit</span></div>
+              <div class="pane-body">
+                <p style="margin:0;border:1px solid var(--rule);padding:0.5rem">Publish the revised exception
+                  register before the end of the month.<span class="caret"></span></p>
+                <div class="row"><span class="btn prim">Accept</span><span class="btn">Cancel</span>
+                  <span class="ghost" style="font-size:0.78rem">edits in place, evidence still visible</span></div>
+              </div>
+            </div>
+            <div class="frame-cap">D.3 &nbsp; Correction is one keystroke away from acceptance, not a separate screen.</div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>A count that stays honest and small. It is information, never a scold, but a count that stays high is this design failing by its own kill criterion.</span></div>
+        <div class="note"><span class="key">2</span><span>Keyboard first, single key verbs, because cost per item is the number that decides whether the loop survives contact with a busy week.</span></div>
+        <div class="note"><span class="key">3</span><span>Moves and renames of personal files are proposals, always. Inside index notes and reflections, the same work happens under the journal without asking.</span></div>
+        <div class="note"><span class="key">4</span><span>Cairn may propose an order and never sets one. Priority is ratified like everything else.</span></div>
+        <div class="note"><span class="key">5</span><span>Evidence inline, not behind a click. This is the whole difference between reviewing a proposal and rubber stamping it.</span></div>
+        <div class="note"><span class="key">6</span><span>Acceptance promotes the draft to a working record: personal content by adoption, embedded, and citable from then on. Before that it is invisible to retrieval, so a proposal can never cite itself.</span></div>
+        <div class="note"><span class="key">8</span><span>Resolved in review: the empty state reads as rest. "Nothing waiting," when the last acceptance happened, and nothing else. The inbox-health gate is measured by watching a user, not by chrome; the in-product metric was killed.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>Ten mixed proposals processed in under two minutes by someone who has seen the surface once. Every
+        acceptance had its evidence on screen at decision time. Seconds per item is measured, not estimated.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE E ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate E / journey: Wake, daily</span>
+      <h2>The morning view</h2>
+      <p class="lede">The question on opening is not what should I do. It is what changed while I was away, and do I
+        trust it. This is the daily open the product has to earn, so a view that takes effort to read will stop
+        being opened.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+        <div>
+          <div class="scroll">
+            <div class="frame">
+              <div class="pane-head"><span>While you were away &nbsp;·&nbsp; 2 nights</span><span class="btn">Open journal</span></div>
+              <div class="pane-body">
+                <span class="eyebrow">Dreamed<sup class="key">1</sup></span>
+                <div class="src"><em class="tnum">14</em><span>links added between related notes</span></div>
+                <div class="src"><em class="tnum">31</em><span>reflections reformatted</span></div>
+                <div class="src"><em class="tnum">6</em><span>index notes updated &middot; <span class="ghost tnum">208 embeddings refreshed</span></span></div>
+                <div class="src"><em class="tnum">0</em><span style="color:var(--strong)">personal notes rewritten<sup class="key">2</sup></span></div>
+                <span class="eyebrow">Waiting</span>
+                <div class="src"><em class="tnum">4</em><span>proposals in the inbox &rarr; &middot; <span class="ghost tnum">2 arrivals needing a cut</span></span></div>
+                <span class="eyebrow">Went stale<sup class="key">3</sup></span>
+                <div class="src"><em>·</em><span>Records Retention Policy &nbsp;<span class="stamp refl">Snapshot 94 days old</span> <span class="btn">Refresh</span></span></div>
+                <div class="row" style="border-top:1px solid var(--rule-2);padding-top:0.7rem">
+                  <span class="btn prim">Revert both nights<sup class="key">4</sup></span>
+                  <span class="ghost" style="font-size:0.78rem">Every change is journaled. Trust is the default,
+                    revert is the guarantee.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="frame-cap">E.1 &nbsp; One reading column in the order the questions come: what dreamed, what
+            waits, what went stale, then the revert. Redrawn to the one-view rule ratified on Plate H.</div>
+        </div>
+
+        <div>
+          <div class="frame">
+            <div class="pane-head"><span>Dream journal</span><span class="ghost">reads as a diff<sup class="key">5</sup></span></div>
+            <div class="pane-body">
+              <div class="receipt">
+                <span class="receipt-head">2026-08-18, 02:14, idle 22 minutes</span>
+                <div class="src" style="color:var(--strong)"><em>+</em><span>Linked "Intake flow.md" to "Exception Handling SOP.md"<br><span class="ghost">both describe the same approval step</span></span></div>
+                <div class="src" style="color:var(--strong)"><em>+</em><span>Normalized headings in 7 reflections</span></div>
+                <div class="src"><em>·</em><span>Stopped at 02:31 when you came back<sup class="key">6</sup></span></div>
+              </div>
+              <div class="row"><span class="btn">Revert this entry</span><span class="ghost" style="font-size:0.78rem">no journal entry, no change</span></div>
+            </div>
+          </div>
+          <div class="frame-cap">E.2 &nbsp; This changed, here is why, here is the revert.</div>
+        </div>
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>Calm density: counts and names. Dreaming reorganizes what is already in the vault and collects nothing, so nothing here is ever news from outside.</span></div>
+        <div class="note"><span class="key">2</span><span><i class="new">new</i> A zero shown on purpose. The audit metric that stops the project if it is ever anything but zero belongs on the screen the user reads every morning, not in a log.</span></div>
+        <div class="note"><span class="key">3</span><span>Stale reflections carry their age and their one action refresh, which is the same action Plate F describes.</span></div>
+        <div class="note"><span class="key">4</span><span>Visible without being ominous. One action reverts everything shown, and the version control underneath is what makes that honest.</span></div>
+        <div class="note"><span class="key">5</span><span>The journal is the price of dreaming at all. It is what makes graduating an action class from asked to journaled possible later, on evidence rather than confidence.</span></div>
+        <div class="note"><span class="key">6</span><span>Reworded plain in review. Idle dreaming works in small pieces and stops the moment you act; the journal saying when and why it stopped is how you learn it never runs behind your back.</span></div>
+        <div class="note"><span class="key">7</span><span>On battery, dreaming holds off. A hardware constraint stated where it acts, so an empty night reads as a reason, not a failure.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>A user who was away for a weekend understands the full state of their vault in under sixty seconds, names
+        what dreaming changed, and reverts it in one action. Watched, timed, unaided.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE F ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate F / journey: Begin, once</span>
+      <h2>First run</h2>
+      <p class="lede">A machine that has never seen Cairn. The distance to the first cited answer is the whole first
+        impression, and this is the one screen where the three operating systems visibly differ.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+        <div class="grid-2">
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Preflight</span><span class="ghost">the gate suite in miniature<sup class="key">1</sup></span></div>
+              <div class="pane-body">
+                <div class="src" style="color:var(--strong)"><em>ok</em><span>Vault located, 1,204 notes</span></div>
+                <div class="src" style="color:var(--strong)"><em>ok</em><span>Ollama reachable on localhost</span></div>
+                <div class="src" style="color:var(--redline)"><em>no</em><span>Embedding model not installed<br>
+                  <span class="ghost">Run <span class="kbd">ollama pull nomic-embed-text</span> in a terminal, then
+                  press Check again.<sup class="key">2</sup></span></span></div>
+                <div class="src"><em>·</em><span class="ghost">Grounding gates, waiting on the model</span></div>
+              </div>
+              <div class="pane-foot"><span class="btn prim">Check again</span><span class="ghost">Green means something because red was possible.<sup class="key">3</sup></span></div>
+            </div>
+            <div class="frame-cap">F.1 &nbsp; Every failure names its one fix, in the platform's own words.</div>
+          </div>
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>First ask</span></div>
+              <div class="pane-body">
+                <p style="margin:0">Ask something about the notes you already have.<sup class="key">4</sup></p>
+                <p class="ghost" style="margin:0;font-size:0.82rem">No sample corpus, no import step, no setup
+                  wizard. Writing notes is already capture, so the vault is never empty on day one.</p>
+              </div>
+            </div>
+            <div class="frame-cap">F.2 &nbsp; The first win comes from the user's own material.</div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>The preflight is the same suite that gates the build, run against this machine. It is the honest version of a splash screen.</span></div>
+        <div class="note"><span class="key">2</span><span><i class="new">new</i> The fix text is per platform: a terminal on Linux and macOS, a specific command on Windows. This is the screen where cross platform stops being an abstraction, and it is the reason no other screen may name a mechanism.</span></div>
+        <div class="note"><span class="key">3</span><span>A check that cannot fail is decoration. Every line here has a failing state that has been seen.</span></div>
+        <div class="note"><span class="key">4</span><span>Nothing is imported during onboarding. Import is a deliberate act and stays one, even at first run.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>Fresh machine to first cited answer, guided only by the plugin's own screens, on each of Windows, Linux,
+        and macOS. Each missing prerequisite produces an instruction, not an error code.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE G ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate G / permanent absences</span>
+      <h2>What is never drawn</h2>
+      <p class="lede">Absences are design decisions too. These three are drawn once, struck, and never appear on
+        another plate. A future wireframe that quietly reintroduces one is the defect this plate exists to catch.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+        <div class="grid-3">
+          <div class="absent">
+            <span class="strike">No send</span>
+            <div class="frame">
+              <div class="pane-head"><span>Draft ready</span></div>
+              <div class="pane-body">
+                <p style="margin:0" class="ghost">Reply to the vendor about the escalation route.</p>
+                <div class="row"><span class="btn">Staged in your mail drafts<sup class="key">1</sup></span></div>
+                <p style="margin:0;font-size:0.8rem;color:var(--redline)">The journey ends here, by construction.</p>
+              </div>
+            </div>
+            <div class="frame-cap">G.1 &nbsp; The strongest affordance that can ever exist.</div>
+          </div>
+          <div class="absent">
+            <span class="strike">No ambient capture</span>
+            <div class="frame">
+              <div class="pane-head"><span>Never offered</span></div>
+              <div class="pane-body">
+                <p style="margin:0" class="ghost">Watch a folder for new files</p>
+                <p style="margin:0" class="ghost">Connect and sync a mailbox</p>
+                <p style="margin:0" class="ghost">Keep my calendar up to date</p>
+                <p style="margin:0;font-size:0.8rem;color:var(--redline)">No surface offers any of these.<sup class="key">2</sup></p>
+              </div>
+            </div>
+            <div class="frame-cap">G.2 &nbsp; Nothing arrives that the user did not bring, point at, or steer.</div>
+          </div>
+          <div class="absent">
+            <span class="strike">No silent change</span>
+            <div class="frame">
+              <div class="pane-head"><span>Never offered</span></div>
+              <div class="pane-body">
+                <p style="margin:0" class="ghost">Apply suggestions automatically</p>
+                <p style="margin:0" class="ghost">Tidy my notes in the background</p>
+                <p style="margin:0" class="ghost">Hide the journal</p>
+                <p style="margin:0;font-size:0.8rem;color:var(--redline)">If the user cannot find out what happened,
+                  it must not have happened.<sup class="key">3</sup></p>
+              </div>
+            </div>
+            <div class="frame-cap">G.3 &nbsp; Every change is journaled and reversible, or it does not run.</div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>Staging happens after ratification, by automation the user steers in the moment. Sending, accepting, and posting are human acts with no graduation path, ever.</span></div>
+        <div class="note"><span class="key">2</span><span>Plate C key 5 is the one place this promise is under pressure, because a drop target that watches a folder starts to look like a folder watcher. Worth a decision before the shell is built.</span></div>
+        <div class="note"><span class="key">3</span><span>Tier graduation, when it comes, moves work from asked to journaled. It never moves work to silent, and no screen ever offers to turn the journal off.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>Search every later wireframe, mock, and shipped screen for a verb that sends, watches, or hides. Finding
+        one is a stop, not a bug report.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE H ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate H / the whole app</span>
+      <h2>Where Cairn lives</h2>
+      <p class="lede">Obsidian's documented anatomy gives a plugin named places to exist: ribbon actions, views,
+        and the status bar. Cairn uses exactly those and invents no region of its own. Each surface is one view
+        opened in one leaf, holding one column of work. Plans are drawn in the proportions of a 1024 by 768
+        window, which is the floor all three platforms can be relied on to offer.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+
+        <div>
+          <div class="shell" role="img" aria-label="Default state: Ask open as a right sidebar view">
+            <div class="shell-bar"><span>Obsidian</span><span>Vault</span><span style="margin-left:auto">1024 &times; 768</span></div>
+            <div class="shell-mid">
+              <div class="z rib"><i></i><i></i><i class="mine"></i></div>
+              <div class="z" style="flex:0 0 23.4%">
+                <span class="dim"><span>Explorer</span><span>240</span></span>
+                <div class="ghost-lines"><i></i><i style="width:72%"></i><i style="width:86%"></i><i style="width:60%"></i></div>
+              </div>
+              <div class="z" style="flex:1 1 auto">
+                <div class="tabstrip"><span class="on">2026-08-18 planning</span></div>
+                <span class="dim"><span>Editor</span><span>440</span></span>
+                <div class="ghost-lines"><i></i><i style="width:88%"></i><i style="width:94%"></i><i style="width:70%"></i><i style="width:84%"></i></div>
+              </div>
+              <div class="z cairn" style="flex:0 0 29.3%">
+                <span class="dim"><span>Cairn &middot; Ask</span><span>300</span></span>
+                <p>Question, answer, receipt. One column, top to bottom.<sup class="key">2</sup></p>
+                <div class="ghost-lines"><i style="width:64%"></i><i></i><i style="width:78%"></i></div>
+                <p style="margin-top:auto;font-size:0.7rem;color:var(--ink-3)">Composer at the foot</p>
+              </div>
+            </div>
+            <div class="shell-status"><span>1,204 notes</span><span class="statusitem" style="margin-left:auto">Cairn ready<sup class="key">1</sup></span></div>
+          </div>
+          <div class="frame-cap">H.1 &nbsp; Default. One ribbon action, one sidebar view, one status item. Widths at 1024: 44, 240, 440, 300.</div>
+        </div>
+
+        <div>
+          <div class="shell" role="img" aria-label="Ratify state: the inbox open as a main area tab">
+            <div class="shell-bar"><span>Obsidian</span><span>Vault</span></div>
+            <div class="shell-mid">
+              <div class="z rib"><i></i><i></i><i class="mine"></i></div>
+              <div class="z" style="flex:0 0 23.4%">
+                <span class="dim"><span>Explorer</span><span>240</span></span>
+                <div class="ghost-lines"><i></i><i style="width:72%"></i><i style="width:86%"></i></div>
+              </div>
+              <div class="z cairn" style="flex:1 1 auto">
+                <div class="tabstrip"><span>2026-08-18 planning</span><span class="on">Inbox &middot; 4</span></div>
+                <div class="focus">
+                  <span class="dim"><span>1 of 4</span><span>newest first</span></span>
+                  <p><b>Commitment</b> &middot; from 2026-08-17 planning notes</p>
+                  <p>Publish the revised exception register before the end of the month. Due 2026-08-31.</p>
+                  <div class="receipt">
+                    <span class="receipt-head">The evidence</span>
+                    <span style="font-family:var(--face-ui)">"...the register needs to be out before month end,
+                      and that sits with me."</span>
+                  </div>
+                  <p class="row"><span class="kbd">A</span> accept &nbsp;<span class="kbd">R</span> reject
+                    &nbsp;<span class="kbd">E</span> edit</p>
+                  <p style="color:var(--ink-3);font-size:0.7rem">3 more behind this one</p>
+                </div>
+              </div>
+            </div>
+            <div class="shell-status"><span>1,204 notes</span><span class="statusitem" style="margin-left:auto">Cairn ready</span></div>
+          </div>
+          <div class="frame-cap">H.2 &nbsp; Ratify. The inbox is a tab in the main area: one proposal in focus,
+            its evidence beneath it, the rest waiting behind it.<sup class="key">3</sup></div>
+        </div>
+
+        <div>
+          <div class="shell" role="img" aria-label="Wake state: the morning view open as a main area tab">
+            <div class="shell-bar"><span>Obsidian</span><span>Vault</span></div>
+            <div class="shell-mid">
+              <div class="z rib"><i></i><i></i><i class="mine"></i></div>
+              <div class="z" style="flex:0 0 23.4%">
+                <span class="dim"><span>Explorer</span><span>240</span></span>
+                <div class="ghost-lines"><i></i><i style="width:72%"></i><i style="width:86%"></i></div>
+              </div>
+              <div class="z cairn" style="flex:1 1 auto">
+                <div class="tabstrip"><span class="on">While you were away</span></div>
+                <div class="focus">
+                  <span class="dim"><span>2 nights</span><span>journal &rarr;</span></span>
+                  <p>14 links added &middot; 31 reflections reformatted &middot; 208 embeddings refreshed</p>
+                  <p style="color:var(--strong)">0 personal notes rewritten</p>
+                  <p>4 proposals waiting in the inbox &rarr;</p>
+                  <p>Records Retention Policy went stale, snapshot 94 days old &nbsp;<span class="btn">Refresh</span></p>
+                  <p style="margin-top:auto"><span class="btn">Revert both nights</span></p>
+                </div>
+              </div>
+            </div>
+            <div class="shell-status"><span>1,204 notes</span><span class="statusitem" style="margin-left:auto">Cairn ready</span></div>
+          </div>
+          <div class="frame-cap">H.3 &nbsp; Wake. The morning view reads top to bottom in one column: what dreamed,
+            what waits, what went stale, then the revert.<sup class="key">4</sup> It only opens when there is
+            something in it.<sup class="key">5</sup></div>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <div class="shell mini" role="img" aria-label="The 1024 crunch">
+              <div class="shell-mid">
+                <div class="z rib"><i class="mine"></i></div>
+                <div class="z" style="flex:0 0 23.4%"><span class="dim"><span>Explorer</span><span>240</span></span></div>
+                <div class="z" style="flex:0 0 21.5%"><span class="dim"><span>Note</span><span style="color:var(--redline)">220</span></span></div>
+                <div class="z" style="flex:0 0 21.5%"><span class="dim"><span>Source</span><span style="color:var(--redline)">220</span></span></div>
+                <div class="z cairn" style="flex:1 1 auto"><span class="dim"><span>Ask</span><span>300</span></span></div>
+              </div>
+            </div>
+            <div class="frame-cap" style="color:var(--redline)">H.4 &nbsp; The 1024 crunch. A citation split beside
+              the explorer leaves two 220 columns. Unusable.<sup class="key">6</sup></div>
+          </div>
+          <div>
+            <div class="shell mini" role="img" aria-label="The fix: explorer collapses">
+              <div class="shell-mid">
+                <div class="z rib"><i class="mine"></i></div>
+                <div class="z" style="flex:0 0 33.2%"><span class="dim"><span>Note</span><span>340</span></span></div>
+                <div class="z" style="flex:0 0 33.2%"><span class="dim"><span>Source at the passage</span><span>340</span></span></div>
+                <div class="z cairn" style="flex:1 1 auto"><span class="dim"><span>Ask</span><span>300</span></span></div>
+              </div>
+            </div>
+            <div class="frame-cap">H.5 &nbsp; The fix. Opening a citation collapses the explorer and restores it
+              on close.<sup class="key">7</sup></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="scroll">
+            <svg class="flow" viewBox="0 0 1040 600" role="img" aria-label="Navigation map between Obsidian's native screens and Cairn's three surfaces">
+              <defs>
+                <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"></path>
+                </marker>
+              </defs>
+
+              <!-- lane labels -->
+              <text class="lbl" x="16" y="20">WAKE</text>
+              <text class="lbl" x="16" y="128">ASK</text>
+              <text class="lbl" x="16" y="320">CAPTURE AND RATIFY</text>
+              <text class="lbl" x="16" y="490">FIRST RUN, ONCE</text>
+
+              <!-- lane A -->
+              <g class="native"><rect x="16" y="30" width="168" height="48"></rect><text x="100" y="60" text-anchor="middle">Obsidian opens</text></g>
+              <g class="own"><rect x="252" y="30" width="176" height="48"></rect><text x="340" y="60" text-anchor="middle">Morning view</text></g>
+              <g class="native"><rect x="496" y="30" width="184" height="48"></rect><text x="588" y="60" text-anchor="middle">Dream journal note</text></g>
+
+              <!-- lane B -->
+              <g class="native"><rect x="16" y="138" width="168" height="48"></rect><text x="100" y="168" text-anchor="middle">A note in the editor</text></g>
+              <g class="native"><rect x="16" y="214" width="168" height="48"></rect><text x="100" y="244" text-anchor="middle">Command palette</text></g>
+              <g class="own"><rect x="252" y="138" width="176" height="124"></rect><text x="340" y="205" text-anchor="middle">Chat pane, Ask</text></g>
+              <g class="native"><rect x="496" y="138" width="184" height="48"></rect><text x="588" y="160" text-anchor="middle">Source in a split,</text><text x="588" y="177" text-anchor="middle">at the cited passage</text></g>
+              <g class="own"><rect x="496" y="214" width="184" height="48"></rect><text x="588" y="244" text-anchor="middle">Export .md or .docx</text></g>
+              <g class="out"><rect x="748" y="214" width="184" height="48"></rect><text x="840" y="237" text-anchor="middle">Ends here.</text><text x="840" y="254" text-anchor="middle">You move the file.</text></g>
+              <line class="stop" x1="932" y1="214" x2="932" y2="262"></line>
+
+              <!-- lane C -->
+              <g class="native"><rect x="16" y="330" width="168" height="48"></rect><text x="100" y="360" text-anchor="middle">Drop a file in the vault</text></g>
+              <g class="own"><rect x="252" y="330" width="176" height="48"></rect><text x="340" y="360" text-anchor="middle">Import report</text></g>
+              <g class="own"><rect x="496" y="330" width="184" height="48"></rect><text x="588" y="360" text-anchor="middle">Inbox</text></g>
+              <g class="native"><rect x="748" y="330" width="184" height="48"></rect><text x="840" y="352" text-anchor="middle">Record or task,</text><text x="840" y="369" text-anchor="middle">in the vault</text></g>
+              <g class="out"><rect x="748" y="406" width="184" height="48"></rect><text x="840" y="428" text-anchor="middle">Staged draft in</text><text x="840" y="445" text-anchor="middle">another application</text></g>
+              <line class="stop" x1="932" y1="406" x2="932" y2="454"></line>
+
+              <!-- lane D -->
+              <g class="native"><rect x="16" y="500" width="168" height="48"></rect><text x="100" y="530" text-anchor="middle">Enable the plugin</text></g>
+              <g class="own"><rect x="252" y="500" width="176" height="48"></rect><text x="340" y="530" text-anchor="middle">Preflight</text></g>
+              <g class="own"><rect x="496" y="500" width="184" height="48"></rect><text x="588" y="530" text-anchor="middle">First ask</text></g>
+              <text class="lbl" x="700" y="530">joins the chat pane above</text>
+
+              <!-- edges -->
+              <line class="edge" x1="184" y1="54" x2="246" y2="54" marker-end="url(#ar)"></line>
+              <text class="lbl" x="215" y="44" text-anchor="middle">if anything changed</text>
+
+              <line class="edge" x1="428" y1="54" x2="490" y2="54" marker-end="url(#ar)"></line>
+              <text class="lbl" x="459" y="44" text-anchor="middle">open journal</text>
+
+              <path class="edge" d="M428,66 L452,66 L452,342 L490,342" marker-end="url(#ar)"></path>
+              <text class="lbl" x="458" y="300">one click</text>
+
+              <line class="edge" x1="184" y1="162" x2="246" y2="162" marker-end="url(#ar)"></line>
+              <text class="lbl" x="215" y="152" text-anchor="middle">Ctrl K, Cmd K</text>
+
+              <line class="edge" x1="184" y1="238" x2="246" y2="238" marker-end="url(#ar)"></line>
+              <text class="lbl" x="215" y="228" text-anchor="middle">palette</text>
+
+              <line class="edge" x1="428" y1="158" x2="490" y2="158" marker-end="url(#ar)"></line>
+              <text class="lbl" x="459" y="148" text-anchor="middle">click a citation</text>
+
+              <line class="edge ret" x1="490" y1="176" x2="434" y2="176" marker-end="url(#ar)"></line>
+              <text class="lbl" x="462" y="192" text-anchor="middle">back</text>
+
+              <line class="edge" x1="428" y1="238" x2="490" y2="238" marker-end="url(#ar)"></line>
+              <text class="lbl" x="459" y="228" text-anchor="middle">export</text>
+
+              <line class="edge" x1="680" y1="238" x2="742" y2="238" marker-end="url(#ar)"></line>
+
+              <line class="edge" x1="428" y1="258" x2="492" y2="336" marker-end="url(#ar)"></line>
+              <text class="lbl" x="436" y="284">save as note</text>
+
+              <line class="edge" x1="184" y1="354" x2="246" y2="354" marker-end="url(#ar)"></line>
+              <text class="lbl" x="215" y="344" text-anchor="middle">drop</text>
+
+              <line class="edge" x1="428" y1="360" x2="490" y2="360" marker-end="url(#ar)"></line>
+              <text class="lbl" x="459" y="378" text-anchor="middle">needs a cut</text>
+
+              <line class="edge" x1="680" y1="354" x2="742" y2="354" marker-end="url(#ar)"></line>
+              <text class="lbl" x="711" y="344" text-anchor="middle">accept</text>
+
+              <line class="edge" x1="620" y1="378" x2="748" y2="428" marker-end="url(#ar)"></line>
+              <text class="lbl" x="640" y="410">after ratification</text>
+
+              <line class="edge" x1="184" y1="524" x2="246" y2="524" marker-end="url(#ar)"></line>
+              <text class="lbl" x="215" y="514" text-anchor="middle">enable</text>
+
+              <line class="edge" x1="428" y1="524" x2="490" y2="524" marker-end="url(#ar)"></line>
+              <text class="lbl" x="459" y="514" text-anchor="middle">green</text>
+            </svg>
+          </div>
+          <div class="flow-key" style="margin-top:0.6rem">
+            <span><i class="fk-native"></i> Obsidian, unchanged</span>
+            <span><i class="fk-own"></i> Cairn</span>
+            <span><i class="fk-out"></i> outside the vault</span>
+            <span style="color:var(--redline)">the bar is a dead end, drawn where the product stops on purpose</span>
+          </div>
+          <div class="frame-cap">H.6 &nbsp; Every route in the application. Two of them end at a bar, and neither bar ever moves.</div>
+        </div>
+
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>The whole footprint outside a view: one ribbon action, one status bar item, palette commands. Ribbon actions, views, and the status bar are the three places Obsidian's plugin anatomy names, and Cairn uses nothing it does not name.</span></div>
+        <div class="note"><span class="key">2</span><span><i class="new">new</i> Ask is a right sidebar view, 300 by default, and Obsidian remembers what the user resizes it to. A sidebar view holds one column and is never subdivided into panes.</span></div>
+        <div class="note"><span class="key">3</span><span><i class="new">new</i> The inbox is a main area tab showing one proposal in focus, evidence beneath it, single keys to act and advance. Plate D is drawn to match. Ratified in review.</span></div>
+        <div class="note"><span class="key">4</span><span><i class="new">new</i> The morning view is one reading column, top to bottom in the order the questions come: what dreamed, what waits, what went stale, the revert. Plate E is drawn to match. Ratified in review.</span></div>
+        <div class="note"><span class="key">5</span><span><i class="new">new</i> It opens on launch only when there is something to report, and closes to the editor. A view that opens on an empty night trains the user to dismiss it.</span></div>
+        <div class="note"><span class="key">6</span><span>Found by drawing it. Two 220 columns is not a layout, so at this width the citation split and the file explorer cannot both exist.</span></div>
+        <div class="note"><span class="key">7</span><span><i class="new">new</i> Collapse the explorer on opening a citation, restore it on close. The alternative, replacing the current note's tab, loses the note the question was about.</span></div>
+        <div class="note"><span class="key">8</span><span>Save as note routes into the inbox rather than writing straight to the vault, because a kept answer is meaning-bearing and ratification is the gate into memory. It is the same rule as everything else, drawn here so the route is visible.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>At 1024 by 768, every journey on plates B through F completes without a horizontal scrollbar and without a
+        region narrower than 260. Walked on Windows, Linux, and macOS, since the same window is 1024 on all three
+        and the platform decides nothing about the layout.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE I ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate I / navigation</span>
+      <h2>The controls</h2>
+      <p class="lede">Every way in, on one plate: one ribbon action, one default hotkey, ten palette commands, and
+        a status item. Obsidian owns the navigation model itself: tabs, splits, back and forward, and the hotkey
+        settings all behave the way the rest of the app already taught the user.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+        <div class="grid-2">
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Command palette &middot; typed "cairn"</span><span class="kbd">Ctrl P</span></div>
+              <div class="pane-body">
+                <div class="menu">
+                  <span class="on"><span>Cairn: Ask</span><span class="mono">Ctrl K<sup class="key">1</sup></span></span>
+                  <span><span>Cairn: Open inbox</span><span class="mono">&nbsp;</span></span>
+                  <span><span>Cairn: Morning view</span><span class="mono">&nbsp;</span></span>
+                  <span><span>Cairn: Import file&hellip;</span><span class="mono">&nbsp;</span></span>
+                  <span><span>Cairn: Export last answer&hellip;</span><span class="mono">&nbsp;</span></span>
+                  <span><span>Cairn: Dream now</span><span class="mono">&nbsp;</span></span>
+                  <span><span>Cairn: Open dream journal</span><span class="mono">&nbsp;</span></span>
+                  <span><span>Cairn: Import reports</span><span class="mono">&nbsp;</span></span>
+                  <span><span>Cairn: Rebuild from vault</span><span class="mono">&nbsp;</span></span>
+                  <span><span>Cairn: Run preflight</span><span class="mono">&nbsp;</span></span>
+                </div>
+                <p class="ghost" style="margin:0;font-size:0.8rem">Ten commands, the complete verb set.<sup class="key">2</sup>
+                  Reopening a view focuses it, never duplicates it.<sup class="key">5</sup></p>
+              </div>
+            </div>
+            <div class="frame-cap">I.1 &nbsp; The palette is the master index. Everything Cairn does is reachable by
+              typing "cairn".</div>
+          </div>
+
+          <div class="stack" style="gap:1rem">
+            <div>
+              <div class="frame">
+                <div class="pane-head"><span>Ribbon action</span></div>
+                <div class="pane-body">
+                  <div class="row">
+                    <span class="row" style="gap:0.4rem"><i class="ico"></i><i class="ico"></i><i class="ico mine"></i></span>
+                    <span class="ghost" style="font-size:0.8rem">Cairn: Ask &middot; the one daily verb<sup class="key">3</sup></span>
+                  </div>
+                </div>
+              </div>
+              <div class="frame-cap">I.2 &nbsp; One icon, opening Ask. The ribbon never becomes a menu.</div>
+            </div>
+            <div>
+              <div class="frame">
+                <div class="pane-head"><span>Status item, four states</span></div>
+                <div class="pane-body">
+                  <div class="row"><span class="statusitem">Cairn ready</span><span class="ghost" style="font-size:0.78rem">click opens Ask</span></div>
+                  <div class="row"><span class="statusitem tnum">Integrating 3</span><span class="ghost" style="font-size:0.78rem">the queue is working an arrival; click opens the latest report</span></div>
+                  <div class="row"><span class="statusitem">Dreaming &middot; stops when you act</span><span class="ghost" style="font-size:0.78rem">click opens the journal</span></div>
+                  <div class="row"><span class="statusitem tnum">4 waiting</span><span class="ghost" style="font-size:0.78rem">click opens the inbox<sup class="key">4</sup></span></div>
+                </div>
+              </div>
+              <div class="frame-cap">I.3 &nbsp; The status item names the current state and opens whatever it is
+                reporting on.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span><i class="new">new</i> Ask is the only command shipping with a default hotkey. Nine defaults would collide with somebody's setup on day one; one is defensible, and it belongs to the daily verb.</span></div>
+        <div class="note"><span class="key">2</span><span>All other bindings happen in Obsidian's own hotkey settings, which already render modifiers per platform. Cairn builds no hotkey interface of its own, which is the A6 rule enforced by not writing code.</span></div>
+        <div class="note"><span class="key">3</span><span>The ribbon action duplicates a palette command rather than holding anything unique, so a user who hides the ribbon loses nothing.</span></div>
+        <div class="note"><span class="key">4</span><span><i class="new">new</i> The status item as a door: it opens the surface it is reporting on. One control, three destinations, zero new chrome.</span></div>
+        <div class="note"><span class="key">5</span><span><i class="new">new</i> Ask, the inbox, and the morning view each exist at most once. Reopening focuses the existing leaf, so navigation never manufactures window state to clean up.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>Every surface in this set reachable from the palette alone, with the ribbon hidden, on all three platforms.
+        A user who knows only the palette and the word "cairn" can reach everything Cairn does.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE J ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate J / the remaining screens</span>
+      <h2>Import, keep, journal, settings, dreaming, tasks</h2>
+      <p class="lede">The screens the daily plates imply but do not draw: arriving in place, what Keep opens, the
+        journal as a note, the settings page where connectors live and stay off, dreaming on demand, and the task
+        ledger.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+        <div class="grid-2">
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Import, in place</span></div>
+              <div class="pane-body">
+                <div class="stack" style="border:1px dashed var(--rule);padding:1.1rem;text-align:center;color:var(--ink-3)">
+                  <span>policy-2026.pdf &nbsp;&rarr;&nbsp; vault</span>
+                </div>
+                <div class="notice" style="align-self:flex-end">
+                  <span><b class="tnum">4 converted, 1 failed</b> &middot; <span class="tnum">2.4s</span></span>
+                  <span class="row"><span class="btn">Open report<sup class="key">1</sup></span>
+                    <span class="ghost" style="font-size:0.75rem">report detail on Plate C</span></span>
+                </div>
+              </div>
+            </div>
+            <div class="frame-cap">J.1 &nbsp; Arrival announces itself where the user is. Each report is a note,
+              one per import, so the history is browsable like anything else in the vault.</div>
+          </div>
+
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Keep, from an answer</span></div>
+              <div class="pane-body">
+                <div class="row" style="justify-content:flex-end"><span class="btn">Keep &#9662;</span></div>
+                <div class="menu" style="align-self:flex-end">
+                  <span><span>Save as note</span><span class="mono">to inbox<sup class="key">2</sup></span></span>
+                  <span><span>Export as Markdown</span><span class="mono">.md<sup class="key">3</sup></span></span>
+                </div>
+                <p class="ghost" style="margin:0;font-size:0.8rem">Every kept or exported answer carries its receipt,
+                  its confidence level, and today's date, because outside the vault nothing can be
+                  re-derived.<sup class="key">4</sup></p>
+              </div>
+            </div>
+            <div class="frame-cap">J.2 &nbsp; The demoted Keep. The default is asking again tomorrow; keeping is the
+              exception, behind a menu.</div>
+          </div>
+
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Dream journal &middot; a note in the vault</span></div>
+              <div class="pane-body">
+                <div class="receipt">
+                  <span class="receipt-head">2026-08-18 &middot; 02:14 &middot; idle 22 min</span>
+                  <div class="src" style="color:var(--strong)"><em>+</em><span>Linked "Intake flow.md" to "Exception Handling SOP.md"</span></div>
+                  <div class="src" style="color:var(--strong)"><em>+</em><span>Normalized headings in 7 reflections</span></div>
+                  <div class="src"><em>·</em><span>Stopped at 02:31 when you came back</span></div>
+                </div>
+                <div class="row"><span class="btn">Revert this entry</span>
+                  <span class="ghost" style="font-size:0.78rem">The journal is never indexed, so a dream can never
+                    cite a dream.<sup class="key">5</sup></span></div>
+              </div>
+            </div>
+            <div class="frame-cap">J.3 &nbsp; The journal reads as a diff and lives as a note, so it needs no viewer
+              of its own.</div>
+          </div>
+
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Settings &middot; Obsidian's own pane</span></div>
+              <div class="pane-body" style="gap:0">
+                <div class="setrow"><div><b>Ollama address</b><p>localhost only; "nothing leaves the machine" starts here</p></div><span class="ghost" style="font-family:var(--face-draft);font-size:0.72rem">http://localhost:11434</span></div>
+                <div class="setrow"><div><b>Models</b><p>embedding and generation, with a working check</p></div><span class="tog on">Both present</span></div>
+                <div class="setrow"><div><b>Email import, .eml files</b><p>files are the floor, on everywhere</p></div><span class="tog on">On</span></div>
+                <div class="setrow"><div><b>Calendar import, .ics files</b><p>files are the floor, on everywhere</p></div><span class="tog on">On</span></div>
+                <div class="setrow"><div><b>Platform automation</b><p>listed by name when one exists for this platform, absent when none does<sup class="key">6</sup></p></div><span class="tog">Off</span></div>
+              </div>
+            </div>
+            <div class="frame-cap">J.4 &nbsp; Connectors are named, individual, and off. Nothing here loads code,
+              and no toggle can bend a promise.</div>
+          </div>
+
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Dream now &middot; blocking<sup class="key">7</sup></span><span class="kbd">Esc</span></div>
+              <div class="pane-body">
+                <p style="margin:0" class="tnum">Working the queue &middot; 14 of 41</p>
+                <div style="height:6px;background:var(--rule-2)"><div style="height:6px;width:34%;background:var(--strong)"></div></div>
+                <p class="ghost" style="margin:0;font-size:0.8rem">Embedding: Accessibility Standard.md</p>
+                <p class="ghost" style="margin:0;font-size:0.8rem">Runs to completion. Esc stops between tasks:
+                  finished work keeps, the rest waits. Every task journaled, same as any dream.</p>
+              </div>
+            </div>
+            <div class="frame-cap">J.5 &nbsp; On demand, dreaming blocks and shows its work. Idle dreaming is the
+              same queue drained quietly.</div>
+          </div>
+
+          <div>
+            <div class="frame">
+              <div class="pane-head"><span>Tasks &middot; the ecosystem's own list<sup class="key">8</sup></span></div>
+              <div class="pane-body">
+                <p class="ghost" style="margin:0;font-family:var(--face-draft);font-size:0.7rem">```tasks &nbsp;
+                  not done &middot; sort by priority, due &middot; group by filename &nbsp;```</p>
+                <div class="stack" style="font-size:0.82rem">
+                  <span>&#9744; Publish the revised exception register &nbsp;<span class="ghost tnum">&#8963; high &middot; due 2026-08-31 &middot; planning &rarr;</span></span>
+                  <span>&#9744; Follow up with the vendor &nbsp;<span class="ghost">from email &rarr;</span></span>
+                  <span>&#9744; Assign the new arrival its cut &nbsp;<span class="ghost">inbox &rarr;</span></span>
+                </div>
+                <p class="ghost" style="margin:0;font-size:0.8rem">Cairn writes each task where it was ratified, in
+                  the dominant tasks-plugin syntax, with due date and ratified priority riding inline, and the queue
+                  always maintains this ledger note over them. The Tasks plugin's query views sit on top when it is
+                  present. Managing the list is editing it, here or in any view; Cairn's only surfaces for tasks
+                  are chat, which answers about them, and the inbox, which proposes them.</p>
+              </div>
+            </div>
+            <div class="frame-cap">J.6 &nbsp; Cairn keeps the ledger, always. The ecosystem is the management
+              surface, and the dates riding in the syntax are what calendar tooling reads.<sup class="key">9</sup></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>Revised in review: reports are not one-offs, they are a history. Each import writes a report note in a Cairn folder; the notice opens the latest, the folder holds the rest, and both are searchable like any note. The notice itself never blocks the work.</span></div>
+        <div class="note"><span class="key">2</span><span>Save as note routes through the inbox, because a kept answer is meaning-bearing and ratification is the gate into memory. Same rule as everything else.</span></div>
+        <div class="note"><span class="key">3</span><span>Decided in review: Markdown is the only export for the MVP. Other formats return only on demonstrated need, with their converter dependencies gated like everything else.</span></div>
+        <div class="note"><span class="key">4</span><span>An exported file is read where nothing can be re-derived, so the receipt and the dates travel inside it. Export writes a file the user then moves, which is the same boundary as a staged draft.</span></div>
+        <div class="note"><span class="key">5</span><span>Transcribed from the thesis: unratified drafts and the journal are excluded from the index, so a proposal can never cite itself as evidence.</span></div>
+        <div class="note"><span class="key">6</span><span>Availability is stated honestly per platform rather than grayed out ambiguously. A machine with no mechanism sees the file floor and nothing else, and loses convenience, not capability.</span></div>
+        <div class="note"><span class="key">7</span><span>Asked for in review: on demand, dreaming is a blocking run with visible progress. It drains the same queue as idle dreaming and arrival-time integration, so "what dreaming does" and "what arrival does" are one list worked at three different times.</span></div>
+        <div class="note"><span class="key">8</span><span>Settled over two rounds of review. Cairn adopts the dominant syntax, checkboxes with dates, recurrence, and priority inline, and the queue maintains the ledger note always, not as a fallback: the internal list is Cairn's own record of what was committed to. What Cairn never has is task-management chrome. Managing the list is editing the vault, directly or through the Tasks plugin's views, and Cairn's two surfaces stay in their lanes: chat answers about tasks, the inbox proposes them. The dates in the syntax are also the calendar answer, and a sync plugin such as Todoist is the user's own transmitter, outside Cairn's promises, which bind Cairn's code and nothing else.</span></div>
+        <div class="note"><span class="key">9</span><span>Two lessons taken from real daily use of that plugin. First, its global filter tag: a working vault fills with checkboxes that are not tasks, imported SOPs especially, so only ratification applies the task tag, and the filter separates real commitments from checkbox noise by construction. Second, the proven view shape is by time, overdue, today, done today, in the daily note, so the scaffold follows that shape rather than one long master list. And broadened in review: real commitments come from everywhere, an email, a meeting note, and every one arrives as an inbox proposal in plain terms, "you committed to sending the register to a colleague by Friday, add as a task?", so every entry in the list traces to a human yes.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>From the settings screen alone, a user can state exactly which systems Cairn can currently touch on their
+        machine and in which direction. An import failure is noticed without watching for it. An exported file,
+        opened cold a month later on another machine, still shows what it rested on and when.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE K ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate K / navigation, nothing else</span>
+      <h2>Every state, and every way out of it</h2>
+      <p class="lede">The complete movement rules. The diagram gives the shape; the table is the specification, and
+        it is exhaustive on purpose: if a move is not in this table, it does not exist. Anything vague here is a
+        defect in this plate, not a detail for later.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+
+        <div>
+          <div class="scroll">
+            <svg class="flow" viewBox="0 0 1040 520" role="img" aria-label="State map: every Cairn state and the controls that move between them">
+              <defs>
+                <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"></path>
+                </marker>
+              </defs>
+
+              <!-- hubs -->
+              <g class="native"><rect x="30" y="180" width="150" height="52"></rect><text x="105" y="211" text-anchor="middle">Your note</text></g>
+              <g class="native"><rect x="30" y="400" width="150" height="52"></rect><text x="105" y="431" text-anchor="middle">App opens</text></g>
+
+              <!-- ask cluster -->
+              <g class="own"><rect x="290" y="40" width="160" height="52"></rect><text x="370" y="71" text-anchor="middle">Ask</text></g>
+              <g class="own"><rect x="560" y="40" width="180" height="52"></rect><text x="650" y="64" text-anchor="middle">Source split,</text><text x="650" y="81" text-anchor="middle">at the passage</text></g>
+              <g class="out"><rect x="830" y="40" width="170" height="52"></rect><text x="915" y="64" text-anchor="middle">Exported .md,</text><text x="915" y="81" text-anchor="middle">yours to move</text></g>
+
+              <!-- inbox -->
+              <g class="own"><rect x="290" y="180" width="160" height="52"></rect><text x="370" y="211" text-anchor="middle">Inbox</text></g>
+
+              <!-- dream run + journal -->
+              <g class="own"><rect x="560" y="290" width="180" height="52"></rect><text x="650" y="314" text-anchor="middle">Dream now,</text><text x="650" y="331" text-anchor="middle">blocking</text></g>
+              <g class="native"><rect x="560" y="400" width="180" height="52"></rect><text x="650" y="431" text-anchor="middle">Journal note</text></g>
+
+              <!-- morning -->
+              <g class="own"><rect x="290" y="400" width="160" height="52"></rect><text x="370" y="431" text-anchor="middle">Morning view</text></g>
+
+              <!-- edges: editor to ask, back -->
+              <line class="edge" x1="180" y1="192" x2="286" y2="72" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="196" y="118">Ctrl K · ribbon · status</text>
+              <line class="edge ret" x1="290" y1="92" x2="186" y2="186" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="232" y="160">Esc</text>
+
+              <!-- ask internals -->
+              <line class="edge" x1="450" y1="60" x2="554" y2="60" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="502" y="50" text-anchor="middle">click [1]</text>
+              <line class="edge ret" x1="554" y1="80" x2="456" y2="80" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="505" y="96" text-anchor="middle">Esc, explorer restores</text>
+              <line class="edge" x1="740" y1="66" x2="824" y2="66" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="782" y="56" text-anchor="middle">Keep: export</text>
+              <line class="stop" x1="1000" y1="40" x2="1000" y2="92"></line>
+
+              <path class="edge" d="M370,92 L370,174" marker-end="url(#ar2)"></path>
+              <text class="lbl" x="378" y="140">Keep: save as note</text>
+
+              <!-- editor to inbox -->
+              <line class="edge" x1="180" y1="206" x2="284" y2="206" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="232" y="196" text-anchor="middle">status: 4 waiting</text>
+              <line class="edge ret" x1="284" y1="222" x2="186" y2="222" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="232" y="238" text-anchor="middle">Esc, or empty</text>
+
+              <!-- inbox self loop -->
+              <path class="edge" d="M450,196 C 500,176 500,236 450,216" marker-end="url(#ar2)"></path>
+              <text class="lbl" x="508" y="210">A · R · E · J K</text>
+
+              <!-- launch to morning -->
+              <line class="edge" x1="180" y1="426" x2="284" y2="426" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="232" y="416" text-anchor="middle">something waits</text>
+
+              <!-- morning edges -->
+              <path class="edge" d="M370,400 L370,232" marker-end="url(#ar2)"></path>
+              <text class="lbl" x="378" y="330">proposals</text>
+              <line class="edge" x1="450" y1="426" x2="554" y2="426" marker-end="url(#ar2)"></line>
+              <text class="lbl" x="502" y="416" text-anchor="middle">journal</text>
+
+              <!-- dream run -->
+              <path class="edge" d="M180,218 C 420,260 480,300 554,312" marker-end="url(#ar2)"></path>
+              <text class="lbl" x="400" y="282">palette: Dream now</text>
+              <path class="edge" d="M650,342 L650,394" marker-end="url(#ar2)"></path>
+              <text class="lbl" x="658" y="372">done</text>
+              <path class="edge ret" d="M740,302 C 790,292 790,332 740,326" marker-end="url(#ar2)"></path>
+              <text class="lbl" x="796" y="318">Esc stops</text>
+            </svg>
+          </div>
+          <div class="flow-key" style="margin-top:0.6rem">
+            <span><i class="fk-native"></i> Obsidian, unchanged</span>
+            <span><i class="fk-own"></i> Cairn</span>
+            <span><i class="fk-out"></i> outside the vault, journey ends</span>
+          </div>
+          <div class="frame-cap">K.1 &nbsp; The shape. Import, preflight, and rebuild travel through the same hubs
+            and live in the table below.</div>
+        </div>
+
+        <div>
+          <div class="scroll">
+            <table class="ktab">
+              <thead><tr><th style="width:15rem">From</th><th style="width:16rem">Control</th><th>What happens</th></tr></thead>
+              <tbody>
+                <tr><td class="kgroup" colspan="3">Ask</td></tr>
+                <tr><td>Anywhere</td><td><span class="kbd">Ctrl K</span> &middot; ribbon icon &middot; palette &middot; status "ready"</td><td>Ask focuses, cursor in the input. The existing leaf is reused, never duplicated.</td></tr>
+                <tr><td>Ask, input empty</td><td><span class="kbd">Esc</span></td><td>Focus returns to the editor. The pane stays where it is.</td></tr>
+                <tr><td>Ask, question typed</td><td><span class="kbd">Enter</span></td><td>Confidence renders first, the prose streams in after it.</td></tr>
+                <tr><td>Ask, streaming</td><td><span class="kbd">Esc</span></td><td>The stream stops. The partial answer stays, marked stopped, with the receipt for what was said.<sup class="key">1</sup></td></tr>
+                <tr><td>Ask, answered</td><td>Click a citation</td><td>The source opens at the passage in a split; the explorer collapses (H7).</td></tr>
+                <tr><td>Source split</td><td><span class="kbd">Esc</span>, or close the split</td><td>Split closes, explorer restores, the conversation is untouched.</td></tr>
+                <tr><td>Ask, answered</td><td>Keep &#9662;</td><td>Save as note sends a proposal to the inbox. Export as Markdown opens the system save dialog.</td></tr>
+                <tr><td>Ask, answered</td><td>Type again, <span class="kbd">Enter</span></td><td>Fresh retrieval from scratch; the transcript above stays visible as context for the reader only (B9).</td></tr>
+                <tr><td class="kgroup" colspan="3">Inbox</td></tr>
+                <tr><td>Anywhere</td><td>Palette &middot; status "4 waiting" &middot; morning "proposals" &middot; a notice</td><td>The inbox tab focuses, first proposal in view.</td></tr>
+                <tr><td>Inbox, proposal</td><td><span class="kbd">A</span></td><td>Accepted and promoted for its kind: record, task, cut, or move. The next proposal appears.</td></tr>
+                <tr><td>Inbox, proposal</td><td><span class="kbd">R</span></td><td>Rejected, remembered as rejected, never returns. The next appears.</td></tr>
+                <tr><td>Inbox, proposal</td><td><span class="kbd">E</span></td><td>The draft opens in place. <span class="kbd">A</span> accepts the edit; <span class="kbd">Esc</span> discards the edit only.</td></tr>
+                <tr><td>Inbox, proposal</td><td><span class="kbd">J</span> / <span class="kbd">K</span></td><td>Next and previous, nothing acted on.</td></tr>
+                <tr><td>Inbox, empty</td><td><span class="kbd">Esc</span>, or close the tab</td><td>Back to the editor.</td></tr>
+                <tr><td class="kgroup" colspan="3">Morning and dreaming</td></tr>
+                <tr><td>App launch</td><td>&mdash;</td><td>The morning view opens only if something waits (H5); otherwise nothing opens at all.</td></tr>
+                <tr><td>Morning view</td><td>"journal" &middot; "proposals" &middot; Refresh</td><td>The journal note, the inbox, or the re-snapshot flow for that stale reflection.</td></tr>
+                <tr><td>Morning view</td><td>Revert both nights</td><td>One confirmation, then the revert runs and the counts update in place.</td></tr>
+                <tr><td>Anywhere</td><td>Palette: Dream now</td><td>The blocking run of J.5, progress visible. <span class="kbd">Esc</span> stops between tasks; finished work keeps.</td></tr>
+                <tr><td>Dream run, finished</td><td>"journal"</td><td>The run's entries, just written.</td></tr>
+                <tr><td class="kgroup" colspan="3">Import and maintenance</td></tr>
+                <tr><td>Anywhere</td><td>Drop a file &middot; palette: Import file&hellip;</td><td>Conversion runs, the notice reports, the queue integrates on arrival.</td></tr>
+                <tr><td>Notice</td><td>Open report</td><td>The newest report note opens in the editor.</td></tr>
+                <tr><td>Anywhere</td><td>Palette: Import reports</td><td>The report folder: the whole history, as notes.</td></tr>
+                <tr><td>Anywhere</td><td>Palette: Run preflight</td><td>The preflight view. Check again re-runs; every red names its one fix.</td></tr>
+                <tr><td>Anywhere</td><td>Palette: Rebuild from vault</td><td>One confirmation, visible progress, and it ends by running the preflight.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="frame-cap">K.2 &nbsp; The specification. Twenty-four moves. There are no others.</div>
+        </div>
+
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span><i class="new">new</i> Stopping a stream keeps the partial answer rather than erasing it, because the receipt for what was said still holds. The stopped mark keeps a half answer from ever passing as a whole one.</span></div>
+        <div class="note"><span class="key">2</span><span>Everything on this plate reuses Obsidian's grammar: tabs close like tabs, Esc backs out one level, back and forward work. Cairn adds moves; it never redefines one the user already knows.</span></div>
+        <div class="note"><span class="key">3</span><span>Two confirmations exist in the whole product, revert and rebuild, both before large reversible operations. Nothing else asks "are you sure," because every other act is small, journaled, or a proposal already.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>Walk the table. Every row demonstrable in the shell exactly as written, and any interaction discovered in
+        the shell that is not a row here is a defect in this plate. Counted both directions.</p>
+    </div>
+  </section>
+
+  <!-- ============ PLATE L ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Plate L / the ecosystem</span>
+      <h2>Neighbors, joined by files</h2>
+      <p class="lede">How Cairn, Obsidian's own features, and third-party plugins work together. One rule organizes
+        the whole plate: no line touches Cairn except the vault's. Every integration is a file written or a file
+        read, which is why the security promise survives an ecosystem Cairn does not control.</p>
+    </div>
+
+    <div class="plate-body">
+      <div class="draw">
+
+        <div>
+          <div class="scroll">
+            <svg class="flow" viewBox="0 0 1040 600" role="img" aria-label="Ecosystem map: Cairn and third-party plugins integrate only through vault files">
+              <defs>
+                <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"></path>
+                </marker>
+              </defs>
+
+              <!-- cairn -->
+              <g class="own"><rect x="40" y="250" width="180" height="84"></rect>
+                <text x="130" y="286" text-anchor="middle">Cairn</text>
+                <text class="lbl" x="130" y="306" text-anchor="middle">the plugin</text></g>
+
+              <!-- vault -->
+              <g class="own"><rect x="390" y="250" width="240" height="84"></rect>
+                <text x="510" y="286" text-anchor="middle">The vault</text>
+                <text class="lbl" x="510" y="306" text-anchor="middle">markdown files on disk</text></g>
+
+              <!-- obsidian core -->
+              <g class="native"><rect x="390" y="56" width="240" height="72"></rect>
+                <text x="510" y="86" text-anchor="middle">Obsidian core</text>
+                <text class="lbl" x="510" y="106" text-anchor="middle">editor &middot; explorer &middot; graph &middot; backlinks</text></g>
+
+              <!-- plugin stack -->
+              <g class="native"><rect x="810" y="66" width="190" height="56"></rect><text x="905" y="99" text-anchor="middle">Tasks</text></g>
+              <g class="native"><rect x="810" y="150" width="190" height="56"></rect><text x="905" y="183" text-anchor="middle">Dataview</text></g>
+              <g class="native"><rect x="810" y="234" width="190" height="56"></rect><text x="905" y="267" text-anchor="middle">Calendar plugins</text></g>
+              <g class="native"><rect x="810" y="318" width="190" height="56"></rect><text x="905" y="351" text-anchor="middle">Kanban</text></g>
+              <g class="out"><rect x="810" y="470" width="190" height="56"></rect>
+                <text x="905" y="493" text-anchor="middle">Sync, Todoist</text>
+                <text class="lbl" x="905" y="512" text-anchor="middle">the user's own transmitter</text></g>
+              <line class="stop" x1="1000" y1="470" x2="1000" y2="526"></line>
+
+              <!-- other writers -->
+              <g class="native"><rect x="390" y="470" width="240" height="64"></rect>
+                <text x="510" y="496" text-anchor="middle">Other writers</text>
+                <text class="lbl" x="510" y="516" text-anchor="middle">Importer plugin &middot; scripts &middot; sync clients</text></g>
+
+              <!-- edges: cairn <-> vault -->
+              <line class="edge" x1="220" y1="278" x2="384" y2="278" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="302" y="268" text-anchor="middle">writes tasks &middot; links &middot; frontmatter &middot; reports</text>
+              <line class="edge ret" x1="384" y1="308" x2="226" y2="308" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="302" y="326" text-anchor="middle">reads files and change events</text>
+
+              <!-- core <-> vault -->
+              <line class="edge" x1="510" y1="128" x2="510" y2="244" marker-start="url(#ar3)" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="518" y="190">renders and edits</text>
+              <text class="lbl" x="640" y="120">the graph and backlinks show</text>
+              <text class="lbl" x="640" y="134">Cairn's links with no Cairn chrome</text>
+
+              <!-- vault -> plugins -->
+              <line class="edge" x1="630" y1="266" x2="804" y2="102" marker-start="url(#ar3)" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="700" y="168">#task lines, dates &#8644; checked boxes</text>
+              <line class="edge" x1="630" y1="282" x2="804" y2="182" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="700" y="240">frontmatter: cut &middot; source &middot; snapshot</text>
+              <line class="edge" x1="630" y1="296" x2="804" y2="260" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="706" y="290">dates in the syntax</text>
+              <line class="edge" x1="630" y1="312" x2="804" y2="342" marker-start="url(#ar3)" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="700" y="338">the same checkboxes</text>
+              <line class="edge ret" x1="630" y1="326" x2="804" y2="490" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="688" y="420">reads notes; sends them by</text>
+              <text class="lbl" x="688" y="434">the user's choice, not Cairn's</text>
+
+              <!-- writers -> vault -->
+              <line class="edge" x1="510" y1="464" x2="510" y2="340" marker-end="url(#ar3)"></line>
+              <text class="lbl" x="518" y="410">well-formed markdown lands on the bus;</text>
+              <text class="lbl" x="518" y="424">missing convention asked in the inbox</text>
+
+              <!-- the rule -->
+              <text class="lbl" x="40" y="480">THE RULE</text>
+              <text x="40" y="504" style="font-size:14px">No line touches Cairn except the vault's.</text>
+              <text class="lbl" x="40" y="524">A reviewer can verify the promise by looking for edges that do not exist.</text>
+            </svg>
+          </div>
+          <div class="flow-key" style="margin-top:0.6rem">
+            <span><i class="fk-own"></i> the product and its bus</span>
+            <span><i class="fk-native"></i> neighbors, present or not</span>
+            <span><i class="fk-out"></i> leaves the machine, by the user's hand only</span>
+          </div>
+          <div class="frame-cap">L.1 &nbsp; The bus. Every arrow is a file, and no box that transmits is Cairn's.
+            Representative neighbors drawn; the table below is the whole contract.<sup class="key">1</sup></div>
+        </div>
+
+        <div>
+          <div class="scroll">
+            <table class="ktab">
+              <thead><tr><th style="width:11rem">Neighbor</th><th style="width:17rem">Cairn writes</th><th style="width:16rem">It gives back</th><th>If absent</th></tr></thead>
+              <tbody>
+                <tr><td>Graph and backlinks</td><td>[[links]], added under the journal</td><td>Cairn's link work rendered in native chrome<sup class="key">2</sup></td><td>Always present</td></tr>
+                <tr><td>Daily notes</td><td>Nothing; typed lines integrate on arrival</td><td>The capture habit's front door</td><td>Any note is capture</td></tr>
+                <tr><td>Tasks</td><td>Checkboxes with dates, recurrence, ratified priority, and the task tag<sup class="key">3</sup></td><td>The live master list and per-day views</td><td>The queue maintains a plain list</td></tr>
+                <tr><td>Dataview</td><td>Convention frontmatter on every arrival</td><td>Dashboards by cut, source, and staleness, for free</td><td>Nothing lost; Ask and the inbox cover it</td></tr>
+                <tr><td>Calendar plugins</td><td>Dates riding in task syntax; .ics imports as notes</td><td>Tasks and days on a calendar</td><td>Dates stay visible as text</td></tr>
+                <tr><td>Kanban</td><td>Nothing special; the standard syntax</td><td>Boards over the same checkboxes<sup class="key">6</sup></td><td>Nothing lost</td></tr>
+                <tr><td>Templater, QuickAdd</td><td>&mdash; they write; Cairn's scaffolds stay plain markdown</td><td>Capture accelerators; what they create lands on the bus like any arrival</td><td>Typing and file drop remain</td></tr>
+                <tr><td>Tag Wrangler</td><td>Nothing; the convention rides in frontmatter, not tags</td><td>Tag renames are ordinary edits; the task tag follows the Tasks plugin's setting, which detection re-reads</td><td>&mdash;</td></tr>
+                <tr><td>Excalidraw</td><td>A generated description beside the drawing</td><td>Sketches and mind maps become findable and citable<sup class="key">6</sup></td><td>No such files exist</td></tr>
+                <tr><td>Linter</td><td>Nothing</td><td>Consistent style; dreaming's formatting pass defers to it<sup class="key">7</sup></td><td>Dreaming normalizes reflections itself</td></tr>
+                <tr><td>Obsidian Git</td><td>Nothing</td><td>Version history; its push is the user's transmitter<sup class="key">8</sup></td><td>Reverts unaffected: the journal executes them</td></tr>
+                <tr><td>Other importers</td><td>&mdash; they write</td><td>Supply to the bus; the inbox asks for a missing cut</td><td>File drop and the palette remain</td></tr>
+                <tr><td>Sync and Todoist</td><td>Nothing</td><td>Nothing to Cairn; it moves the user's files at the user's choice<sup class="key">4</sup></td><td>&mdash;</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="frame-cap">L.2 &nbsp; The integration contract, one row per neighbor. The last column is the
+            floor: nothing on this plate is required.<sup class="key">5</sup></div>
+        </div>
+
+      </div>
+
+      <aside class="notes">
+        <span class="eyebrow">Redline</span>
+        <div class="note"><span class="key">1</span><span>The security posture, drawn. Extension happens through data in the vault, never code loaded into Cairn, so the diagram's proof is an absence: there is no Cairn-to-plugin edge to audit because none exists.</span></div>
+        <div class="note"><span class="key">2</span><span><i class="new">new</i> The product's core value shows up in Obsidian's own chrome: every link the queue or a dream adds appears in graph view and the backlinks pane with no Cairn surface involved. The vault gets visibly richer in the tools the user already trusts.</span></div>
+        <div class="note"><span class="key">3</span><span>Two-way with no protocol: checking a box in any Tasks view edits the file, the queue sees the edit like any arrival, and there is nothing to synchronize because the file is the sync.</span></div>
+        <div class="note"><span class="key">4</span><span>A sync plugin transmits, which Cairn never does. The distinction is honest and checkable: Cairn's promises bind Cairn's code, and a user who runs a transmitter has made that choice in Obsidian, not in Cairn.</span></div>
+        <div class="note"><span class="key">5</span><span><i class="new">new</i> The preflight and settings name which neighbors were detected, and scaffolds adapt: with Tasks present the ledger is its query block, without it the plain list. Detection reads the plugin list and settings files, data, never code, and a Cairn setting overrides anything detected.</span></div>
+        <div class="note"><span class="key">6</span><span><i class="new">new</i> Plugin-owned formats are artifacts, not prose. Excalidraw drawings, Kanban boards, and canvas files are machine-shaped markdown or JSON, so the queue describes and links them to make them findable, and dreaming never reformats them. Detected by extension and frontmatter marker, and the rule matters because a normalized board is a broken one.</span></div>
+        <div class="note"><span class="key">7</span><span><i class="new">new</i> Two formatters, one vault. When Linter is detected, dreaming's formatting normalization is off by default and defers to the user's own rules. A file another tool reformats is re-embedded, never re-formatted back, so the two robots cannot ping-pong.</span></div>
+        <div class="note"><span class="key">8</span><span><i class="new">new</i> The revert guarantee belongs to the journal, not to git. Reverts execute from journal entries, version control is the net beneath them, and whether history pushes to a remote is Obsidian Git's user-held choice, the same transmitter rule as sync.</span></div>
+      </aside>
+    </div>
+
+    <div class="test">
+      <span class="eyebrow">Test that can fail</span>
+      <p>Disable every third-party plugin: every journey on every plate still completes. Re-enable them: the
+        scaffolds upgrade with no configuration beyond what detection provides. And a link added by the queue is
+        visible in graph view the same day it lands.</p>
+    </div>
+  </section>
+
+  <!-- ============ CLOSING ============ -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="eyebrow">Foot of the set</span>
+      <h2>The ledger</h2>
+      <p class="lede">Every proposal this set has raised, with its standing after the 2026-08-18 review. Three rows
+        opened by the final plugin sweep remain; everything else is settled. A killed entry stays listed so it is
+        not re-invented by accident.</p>
+    </div>
+
+    <div class="queue">
+      <div><b>A6</b><p>Modifier keys and paths render per platform; no screen names a mechanism only one operating system has. <b>Ratified.</b></p></div>
+      <div><b>B9</b><p>Follow-ups retrieve from scratch; the transcript stays on screen as context for the reader, never as evidence for the engine. <b>Ratified, clarified in review.</b></p></div>
+      <div><b>B10</b><p>Citations name how each passage was found; confidence summarizes agreement between methods. <b>Ratified.</b></p></div>
+      <div><b>C5</b><p>Superseded by decision: the vault is the integration boundary, in-app vault events included, and integration starts on arrival. <b>Ratified 2026-08-18.</b></p></div>
+      <div><b>D7</b><p>The seconds-per-item display. <b>Killed in review</b>, with J7. The inbox-health gate is measured by watching, not by chrome.</p></div>
+      <div><b>D8</b><p>Empty-state wording. <b>Resolved:</b> "Nothing waiting," the time of the last acceptance, nothing else.</p></div>
+      <div><b>E2</b><p>The zero that stops the project, shown every morning. <b>Ratified.</b></p></div>
+      <div><b>E6</b><p>"Yielded" was jargon. <b>Reworded:</b> the journal says dreaming stopped when you came back.</p></div>
+      <div><b>E7</b><p>On battery, dreaming holds off. <b>Kept</b> as a stated system behavior, nothing more.</p></div>
+      <div><b>F2</b><p>Per-platform fix text on the preflight. <b>Kept, minor:</b> the flows matter, not the chrome.</p></div>
+      <div><b>H2</b><p>Ask is a right sidebar view, 300 wide by default, one column, never subdivided. <b>Ratified 2026-08-18.</b></p></div>
+      <div><b>H3</b><p>The inbox is a main area tab, one proposal in focus at a time. Plate D drawn to match. <b>Ratified 2026-08-18.</b></p></div>
+      <div><b>H4</b><p>The morning view is a main area tab in one reading column. Plate E drawn to match. <b>Ratified 2026-08-18.</b></p></div>
+      <div><b>H5</b><p>The morning view opens on launch only when there is something to report. <b>Ratified.</b></p></div>
+      <div><b>H7</b><p>Opening a citation collapses the explorer, restored on close. <b>Ratified.</b></p></div>
+      <div><b>I1</b><p>Ask is the only command with a default hotkey; the rest bind in Obsidian's own settings. <b>Ratified.</b></p></div>
+      <div><b>I4</b><p>The status item opens whichever surface it is reporting on. <b>Ratified.</b></p></div>
+      <div><b>I5</b><p>Reopening focuses the existing leaf; each surface exists at most once. <b>Ratified.</b></p></div>
+      <div><b>J1</b><p><b>Revised in review:</b> import reports are notes, one per import, a browsable history; the notice opens the latest.</p></div>
+      <div><b>J3</b><p><b>Decided:</b> Markdown is the only export for the MVP.</p></div>
+      <div><b>J7</b><p>The ratification-cost toggle. <b>Killed</b> with D7.</p></div>
+      <div><b>J8</b><p><b>Corrected in review:</b> Cairn always maintains the ledger, in plugin syntax, dates and ratified priority inline; the ecosystem is the management surface, and Cairn's only task surfaces are chat and the inbox. <b>Ratified 2026-08-18.</b></p></div>
+      <div><b>J9</b><p>The task tag is applied at ratification only, and commitments distilled from anywhere, email and meetings included, arrive as inbox proposals: add-as-task is a human act every time. <b>Ratified, broadened.</b></p></div>
+      <div><b>K1</b><p>Stopping a stream keeps the partial answer, marked stopped, receipt intact. <b>Ratified.</b></p></div>
+      <div><b>L2</b><p>Links added by the queue surface in graph view and backlinks natively: the core value rendered in Obsidian's own chrome. <b>Ratified.</b></p></div>
+      <div><b>L5</b><p>Preflight and settings name detected neighbors and scaffolds adapt; detection reads plugin lists and settings files, data never code, with a Cairn setting overriding. <b>Ratified.</b></p></div>
+      <div><b>L6</b><p>Plugin-owned formats, Excalidraw, Kanban, and canvas files, are described and linked, never reformatted. <b>Open.</b></p></div>
+      <div><b>L7</b><p>When Linter is present, dreaming's formatting pass defers to it, and re-embedding never re-formats, so the two robots cannot ping-pong. <b>Open.</b></p></div>
+      <div><b>L8</b><p>Reverts execute from the journal; version control is the net beneath; pushing history to a remote is the user's own transmitter. <b>Open.</b></p></div>
+      <div><b>Set</b><p>The drawing-set conventions and the HTML medium. <b>Ratified by use.</b></p></div>
+    </div>
+
+    <p class="lede" style="margin-top:1.4rem">What comes next depends on the notes. If the plates hold, the next
+      artifact is a drivable shell over recorded fixtures, Ask first, with the timing recorded from the reference
+      engine so the shell is designed against streaming and refusals rather than against instant answers from a
+      world that does not exist.</p>
+  </section>
+
+</div>
