@@ -1,8 +1,8 @@
 # Cairn Connectors
 
-**Draft 1. Numbered for markup.**
+**Draft 2. Numbered for markup.**
 
-*Written from a user-need interview, 2026-08-18. Needs were established first; mechanisms were chosen last, and only where a need ranked them. This document designs the v1 slate; the connector rules themselves live in THESIS.md section 8 and are not restated here except where a rule gets sharper.*
+*Written from a user-need interview, 2026-08-18. Needs were established first; mechanisms were chosen last, and only where a need ranked them. This document designs the v1 slate; the connector rules themselves live in THESIS.md section 8 and are not restated here except where a rule gets sharper. Draft 2 lands the answers to section 8's five questions, received 2026-08-21; the answers are integrated into the body and recorded with their verdicts in section 8.*
 
 ---
 
@@ -36,6 +36,11 @@ This is a loosening of the strictest reading, stated openly rather than slipped 
 
 Each connector declares its domain, direction, and mechanism, ships in this repository, and is off by default. Every pull writes an import report and lands content with convention frontmatter: cut, source, snapshot or received date.
 
+Two rules hold across every connector and the floor alike:
+
+1. **Everything converts to markdown.** Documents, attachments, and transcripts all import automatically as markdown notes; nothing is listed for later selection.
+2. **The link to the original source always persists.** When the original arrived as a file, dropped or exported, it is kept as an artifact and the note links to it. When it was pulled, the note links to where it came from. Either way, frontmatter carries a path back to the original, permanently.
+
 ### 4.1 Email, inbound
 
 | Deployment | Mechanism | Notes |
@@ -43,6 +48,10 @@ Each connector declares its domain, direction, and mechanism, ships in this repo
 | Work | Outlook via COM, invoked as a bundled, reviewed script run per pull | No resident process; the script runs, returns, and exits. Message converted to markdown, original kept as artifact. |
 | Personal | Google connector, `gmail.readonly` scope, user-invoked pulls | The one network-touching connector on the slate. Tokens stored locally. |
 | Floor | .eml files, dragged or exported by hand | Works on any machine with no connector enabled. |
+
+**Default scope: Inbox plus Sent, 90 days back**, visible in settings and in every report. Every pull reads the same window; messages already imported are recognized and skipped, so the one window serves both the initial seed and gap coverage since the last run. A lapse longer than 90 days leaves a gap, and the report says so.
+
+**Setup on the personal side**: the connector spawns the system browser for the OAuth consent flow, and instructions ship for creating a personal OAuth client, honest about the roughly ten-minute setup. Tokens are stored locally. This flow exists on the personal Mac only, for now.
 
 ### 4.2 Calendar, inbound
 
@@ -52,12 +61,14 @@ Each connector declares its domain, direction, and mechanism, ships in this repo
 | Personal | Google connector, `calendar.readonly` scope | Same connector, second declared domain. |
 | Floor | .ics files | Already in the import floor; nothing new. |
 
+**One note per event.** Encapsulation wins: each event is a self-contained note that cites cleanly and links from anywhere. Cairn maintains no weekly rollup and builds no calendar view, because the calendar application is already good at being a calendar; Cairn holds the facts, and the vault's own calendar tooling can read the dates as they stand.
+
 ### 4.3 Meeting transcripts, inbound
 
 Transcripts are format work more than connector work. The importer handles the file shapes transcripts actually arrive in, and the existing connectors carry them where they can.
 
 1. **Formats first**: .docx recaps, .vtt transcripts, and pasted text, each converted with meeting frontmatter (date, source, participants as facts) and the original kept as artifact.
-2. **Work**: Copilot recaps leave by export or copy, since Graph is unavailable. The importer meets them as files.
+2. **Work**: Copilot recaps leave on a three-rung ladder: copied text first, .docx export second, a network path last. v1 ships the first rung only, so pasted text is the first format the importer must be good at; the later rungs are designed only when reached.
 3. **Personal**: Meet transcripts land as Docs in Drive; a `drive.readonly` scope on the Google connector can fetch them, or the file floor carries them.
 
 Distillation rules apply with full force here: decisions, commitments, action items, and open questions come out; affect, tone, and assessments of individuals never do. A transcript is the rawest content Cairn will hold, and the constraint is the reason it can be held at all.
@@ -82,10 +93,10 @@ A reviewer should be able to hold this section to the letter.
 2. **A scope gate**: a pull against a fixture mailbox imports exactly the configured folders and window, nothing more, and the report says so.
 3. **A direction gate**: the Google connector's token scopes are asserted read-only at connect time, and the gate fails if a broader scope is ever requested.
 
-## 8. Open questions, numbered for answers
+## 8. The five questions, answered 2026-08-21
 
-1. **Default pull scope for email.** Proposed: Inbox plus Sent, 90 days back, both visible in settings and in every report. Confirm or correct.
-2. **Attachment policy.** Import every attachment as a document automatically, or list attachments in the report for selective import? The second is more pointed; the first is less ceremony.
-3. **Copilot recap egress.** Which export form does the work tenant actually offer: a .docx download, copyable text, or a OneDrive file? The answer decides the first format the importer must be good at.
-4. **Google app registration.** The connector needs an OAuth client. Ship instructions for creating a personal one (data, not code, and honest about the ten-minute setup), or is that friction unacceptable for v1?
-5. **Calendar depth.** Events as individual notes, or a rolling per-week note the connector maintains? Individual notes cite cleanly; the weekly note reads better.
+1. **Default pull scope for email. Ratified as proposed**: Inbox plus Sent, 90 days back, visible in settings and in every report. The window pulls double duty by design: it is the initial seed and it is the gap coverage since the last run.
+2. **Attachment policy. Automatic import.** Every document converts to markdown; the original is kept as an artifact when it arrived as a file; and regardless of path, a link to the original source must persist. No selection ceremony.
+3. **Copilot recap egress. A ladder: copy, then .docx, then a network path.** v1 starts with copy, so pasted text is the first format the importer must be good at.
+4. **Google app registration. Acceptable.** The connector spawns the system browser for the OAuth flow, with shipped instructions for creating a personal client. Personal Mac only, for now.
+5. **Calendar depth. Events as individual notes.** Encapsulation is better, and Cairn does not duplicate what the calendar application is already good at.
