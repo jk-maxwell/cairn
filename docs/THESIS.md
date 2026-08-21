@@ -1,8 +1,8 @@
 # Cairn Product Thesis
 
-**Draft 6. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
+**Draft 7. Numbered for markup. Supersedes docs/DESIGN.md draft 1.**
 
-Changes from draft 5: SVG authoring added in section 4; priority as a ratification act and the guilt-pile warning moved into section 6; dream scheduling defined in section 9, idle-triggered and interruptible with no OS services; the content index and rebuild gate added in section 10; section 12 gains the integrity stance, the evidence-not-instructions rule, and the cold-model paragraph; open questions restructured as a work queue. No sections renumbered.
+Changes from draft 6, the work-queue amendment, ratified 2026-08-21: section 9 retitled and opened with the arrival-time work queue, dreaming recast as its idle drain and Dream now as the blocking on-demand drain; one-sentence touches in sections 2 and 6 for consistency. No sections renumbered.
 
 ---
 
@@ -30,7 +30,7 @@ The cut decides three things downstream:
 2. **Dream mode permissions differ.** Personal content is never rewritten, only annotated and linked. Reflections can be reformatted, reorganized, and re-snapshotted freely.
 3. **Loss differs.** Reflections regenerate from their sources. Personal content does not. Backup posture, deletion prompts, and sync caution all follow the cut.
 
-Alongside the two source kinds sits a **derived layer**: summaries, diagram descriptions, distillation drafts, index notes, and embeddings. Derived content is always marked as generated, always regenerable, and never a source of truth; receipts cite through it to the underlying source. The single exception is a distillation you have ratified, which becomes a working record: personal content by adoption (section 6).
+Alongside the two source kinds sits a **derived layer**: summaries, diagram descriptions, distillation drafts, index notes, and embeddings, produced on arrival by the work queue (section 9). Derived content is always marked as generated, always regenerable, and never a source of truth; receipts cite through it to the underlying source. The single exception is a distillation you have ratified, which becomes a working record: personal content by adoption (section 6).
 
 ## 3. Content types
 
@@ -77,7 +77,7 @@ Leverage the ecosystem before writing anything: Obsidian's official Importer plu
 Cairn's bias is strong and structural: the machine drafts, the human ratifies, and ratification is what turns output into memory. The loop sits in one of three places, and every capability is assigned to a tier deliberately.
 
 1. **Ratified: the human approves before it counts.** Anything that asserts meaning is a proposal until accepted. Distilled decisions, commitments, and action items land in a review inbox; accepting one promotes it to a working record, personal content by adoption, and only then is it embedded and citable. Kept summaries and file moves work the same way. Acceptance is the gate into memory. The review inbox is the first ratification surface; inline accept, which must understand the context it sits in, follows later. Priority is ratified like everything else: Cairn may propose an order, for the inbox or for generated tasks, and never sets one. And the cost of ratifying must stay near zero, or the inbox becomes a guilt pile and the loop gets bypassed: the first thing to watch in daily use.
-2. **Journaled: pre-authorized by class, reviewed after.** Mechanical work runs autonomously: reformatting reflections, refreshing embeddings, flagging staleness, maintaining index notes. Every action is journaled and reversible in one step.
+2. **Journaled: pre-authorized by class, reviewed after.** Mechanical work runs autonomously, at arrival on the work queue and at idle as dreaming drains it: converting arrivals, adding links under the journal, reformatting reflections, refreshing embeddings, flagging staleness, maintaining index notes. Every action is journaled and reversible in one step.
 3. **Forbidden: no authorization exists.** Rewriting personal content. Deleting source content. Transmitting anything anywhere.
 
 The boundary still being explored is the middle of the ladder: linking and sorting are not purely mechanical, because a link asserts relatedness and sorting rearranges the owner's mental map of their own files. The v1 position:
@@ -111,11 +111,13 @@ Import, refresh, and fulfillment staging all touch systems Cairn does not own, a
 
 Extension by third parties happens through the vault as data, never through code injected into Cairn. That single rule is what keeps the promises of section 12 checkable rather than aspirational.
 
-## 9. Dream mode
+## 9. The work queue and dream mode
 
-While you are away, Cairn improves the vault with idle local compute: discovers and adds links between related notes and reflections, normalizes formatting, refreshes embeddings, builds and maintains index notes, flags stale reflections, and drafts distillations and generation proposals from new working content for the review inbox.
+Integration happens on arrival, and the vault is the boundary. Anything that enters the vault by any means, a dropped file, typing in any note, another plugin writing to disk, lands on one work queue the moment it arrives: convert if needed, embed, add links under the journal, and ask the inbox for a cut when the source does not say. Obsidian raises in-app events when vault files change, and acting on them is not ambient collection, because everything in the vault is there by the user's own act; the promise governs what may enter the vault, and nothing outside it is ever watched. Links between content are the core value of the product, and value that waits for idle time is value you do not have when you need it.
 
-Scheduling stays inside Obsidian, light touch by design. There is no scheduling convention in the ecosystem to lean on, and plugins live only while the app is open, so Cairn dreams the way people do: when nothing else is happening. Dreaming triggers on detected idle, works in small chunks, and yields the instant the user stirs; because every chunk is journaled, a half-finished dream is safe to abandon and resume. A manual dream-now command covers the impatient case, and on battery power dreaming holds off. No OS services, no background daemons, nothing running outside the app: the security posture stays as clean as the touch is light. If overnight depth is ever wanted, an explicitly user-created OS schedule is the future-state path, never a default.
+While you are away, Cairn drains the same work queue with idle local compute and does the deeper work only idle time affords: link discovery beyond the arrival pass, formatting normalization, index notes, staleness flags, and distillation and generation proposals for the review inbox.
+
+Scheduling stays inside Obsidian, light touch by design. There is no scheduling convention in the ecosystem to lean on, and plugins live only while the app is open, so Cairn dreams the way people do: when nothing else is happening. Dreaming triggers on detected idle, works in small chunks, and yields the instant the user stirs; because every chunk is journaled, a half-finished dream is safe to abandon and resume. Dream now drains the queue on demand as a blocking, journaled run with visible progress, and on battery power dreaming holds off. No OS services, no background daemons, nothing running outside the app: the security posture stays as clean as the touch is light. If overnight depth is ever wanted, an explicitly user-created OS schedule is the future-state path, never a default.
 
 Three rules keep it trustworthy:
 
