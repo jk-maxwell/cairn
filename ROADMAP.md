@@ -12,6 +12,8 @@ A ratified product thesis. Fourteen sections defining the vault as the hub, the 
 
 A working reference implementation. The Python engine from the proof-of-concept phase: grounded retrieval with a receipt on every answer, refusal when the corpus does not contain the answer, a deterministic front door that answers without a model call, a protocol surface any OpenAI-compatible or Ollama-compatible chat client can use, and 20 gates green on two operating systems. On capable hardware a real question answers in 1.2 seconds end to end.
 
+A ratified drawing set. Twelve plates in [docs/WIREFRAMES.html](docs/WIREFRAMES.html) covering every screen, the whole-app layout, and a 24-row movement table (Plate K) that is the navigation spec, landed through four rounds of numbered review.
+
 Zero lines of plugin code. The product the thesis describes is not built. Between those two sentences sits this entire document.
 
 One known defect. In the reference engine's shared answer path, the retrieval-strength description is overwritten before the receipt is assembled, truncating the strength line on clean answers and doubling the warning on flagged ones. It matters more now than when it was found, for a reason named in Horizon 1.
@@ -20,9 +22,11 @@ One known defect. In the reference engine's shared answer path, the retrieval-st
 
 The order below is dependency, not preference.
 
-**The convention leads** because it is the public interface of everything. The frontmatter contract, which cut, what source, what snapshot date, what provenance, gets read by the index, the importers, the receipts, and the dreaming rules. Designing it late means migrating a live vault.
+**The surface leads** because it holds the open risk. The engine is the proven part, so building it first proves nothing new, while five capabilities packed into one surface is where the product can still fail. The sequence is the inversion argued in [docs/RATIONALE.md](docs/RATIONALE.md) section 10: land the UX as a reviewable drawing set, build a drivable shell over fixtures recorded from the reference engine, then swap the real backend in behind a stable interface, capability by capability, Ask first.
 
-**The probe runs first** because the biggest risk is not technical. The prototype proved the engine; nothing yet proves the habit. An existing chat plugin pointed at the reference engine's endpoint, on a real vault, answers the question "does the author actually reach for this inside Obsidian" in days, before the expensive rewrite begins.
+**The convention leads the backend track** because it is the public interface of everything the engine touches. The frontmatter contract, which cut, what source, what snapshot date, what provenance, gets read by the index, the importers, the receipts, and the dreaming rules. Designing it late means migrating a live vault.
+
+**The probe runs in parallel** because the biggest risk is not technical. The prototype proved the engine; nothing yet proves the habit, and fixtures can validate comprehension but not the habit. An existing chat plugin pointed at the reference engine's endpoint, on a real vault, answers the question "does the author actually reach for this inside Obsidian" in days, alongside the shell work rather than after it.
 
 **Dreaming ships last** because it is the only capability that acts while nobody watches. It goes behind the journal, the one-step revert, and the content cut, all proven in daylight first.
 
@@ -32,18 +36,27 @@ The order below is dependency, not preference.
 
 **The outcome.** A question typed in Obsidian gets a cited answer from the vault, with a receipt, or an honest refusal.
 
-**The work, in order.**
+**The work: two tracks worked separately, a probe alongside, a swap at the end.**
 
-1. **The metadata convention**, drafted as a short design document and reviewed before anything reads it.
-2. **The v0 probe**, in week one: an existing chat plugin against the reference engine on a real vault. Its finding shapes the Ask surface and tests the habit bet early.
-3. **Fix the receipt defect in the reference engine**, with a gate asserting the whole strength sentence. This precedes the port because the parity gates freeze golden answers from the reference, and golden answers frozen from a defective reference make the defect the spec.
-4. **The TypeScript engine port**: heading-aware chunking, embeddings over Ollama HTTP, retrieval, receipts, refusal, front door. Acceptance is the ported gate suite plus golden-answer parity gates against the reference on a frozen corpus. Cold models make byte-comparable output a fair standard, so divergence is a failing gate, not a judgment call.
-5. **The content index**: per file, its hash, cut, source, snapshot date, and processing state. With it, the rebuild gate: drop every derived store, rebuild from the vault alone, get the same answers.
-6. **The Ask surface** in the plugin, with the evidence-not-instructions gate landing here, before any importer exists, so the defense precedes the first attacker-authored content.
+The surface track, in order.
+
+1. **The drawing set**, landed: twelve plates ratified through four rounds of numbered review, with Plate K's movement table as the navigation spec.
+2. **Fixtures recorded from a corrected reference.** First fix the receipt defect in the reference engine, with a gate asserting the whole strength sentence, because fixtures frozen from a defective reference make the defect the spec. Then record fixtures from the reference engine on the synthetic corpus, carrying real token timing, so the shell is designed against streaming, pauses, and refusals rather than instant answers from a world that does not exist.
+3. **The drivable shell, Ask first**: the plugin walking Plates B, D, E, and K against the fixtures. Plate K's table is the acceptance list, and every journey test in the drawing set is written to be watched and failed.
+
+The backend track, in order.
+
+4. **The metadata convention**, drafted as a short design document and reviewed before anything reads it.
+5. **The TypeScript engine port**: heading-aware chunking, embeddings over Ollama HTTP, retrieval, receipts, refusal, front door. Acceptance is the ported gate suite plus golden-answer parity gates against the reference on a frozen corpus. Cold models make byte-comparable output a fair standard, so divergence is a failing gate, not a judgment call.
+6. **The content index**: per file, its hash, cut, source, snapshot date, and processing state. With it, the rebuild gate: drop every derived store, rebuild from the vault alone, get the same answers.
+
+**The probe**, in week one and in parallel with both tracks: an existing chat plugin against the reference engine on a real vault. The fixtures can validate comprehension but not the habit; the habit forms around real answers or not at all, and its finding shapes the Ask surface while the shell is still cheap to change.
+
+**The swap.** The shell moves from fixtures to the ported engine behind the interface the fixtures froze, Ask first. The evidence-not-instructions gate lands here, before any importer exists, so the defense precedes the first attacker-authored content. Any behavior difference between the shell on fixtures and the shell on the engine is a failing gate, not a judgment call.
 
 **Exit gate, two parts, both able to fail.**
 
-- Ported gates, parity gates, injection gate, and rebuild gate all green in continuous integration.
+- Ported gates, parity gates, injection gate, and rebuild gate all green in continuous integration, and the shell's journey tests passing against the real engine.
 - After two weeks on a real vault, the receipt log shows real questions asked on most working days, and the author can name three answers that beat the old way of finding out. The log can show silence. Silence is the gate failing.
 
 ## 4. Horizon 2: the desk flows in
