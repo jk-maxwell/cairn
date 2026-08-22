@@ -40,6 +40,7 @@ from pathlib import Path
 import config
 import db as dbmod
 import enrich
+import registry
 
 ROOT = config.ROOT
 SOURCES_DIR = config.SOURCES_DIR
@@ -80,6 +81,54 @@ def snapshot() -> dict:
             except OSError:
                 continue  # file vanished mid-scan; next cycle will see it as removed
     return snap
+
+
+def registry_snapshot() -> dict:
+    """(path -> mtime) for every vault file the registry answers to: entity
+    pages under Projects/ and People/, Profile.md, and the governance queue
+    note. Cheap (a couple of directory globs), so it can run every poll."""
+    snap = {}
+    vd = config.VAULT_DIR
+    paths = []
+    for folder in ("Projects", "People"):
+        d = vd / folder
+        if d.is_dir():
+            paths.extend(d.glob("*.md"))
+    for p in (vd / "Profile.md", vd / "Inbox" / "Governance.md"):
+        if p.exists():
+            paths.append(p)
+    for p in paths:
+        try:
+            snap[str(p)] = p.stat().st_mtime
+        except OSError:
+            continue
+    return snap
+
+
+def registry_sync(reason: str) -> None:
+    """Re-sync the derived registry index from the vault (user edits to entity
+    pages / Profile.md win over the DB), act on governance-queue edits
+    (checked box -> ratify, deleted line -> reject), then rewrite the queue
+    note and the rollup blocks. Each step is idempotent, so the extra cycle
+    our own rewrites trigger settles immediately."""
+    conn = dbmod.connect()
+    try:
+        conn.execute("PRAGMA busy_timeout = 10000")
+        dbmod.init_db(conn)
+        scan = registry.scan_vault(conn, config.VAULT_DIR)
+        edits = registry.apply_queue_edits(conn, config.VAULT_DIR)
+        registry.write_queue_note(conn, config.VAULT_DIR)
+        rolled = registry.regenerate_rollups(conn, config.VAULT_DIR)
+        if edits["ratified"] or edits["rejected"] or scan["added"] or scan["updated"] or scan["removed"]:
+            try:
+                enrich.regenerate_home(conn)
+            except Exception as e:
+                log(f"registry WARN could not regenerate Home: {type(e).__name__}: {e}")
+        log(f"registry reason={reason} pages={scan['pages']} added={scan['added']} "
+            f"updated={scan['updated']} removed={scan['removed']} "
+            f"ratified={edits['ratified']} rejected={edits['rejected']} rollups={rolled}")
+    finally:
+        conn.close()
 
 
 def diff_snapshots(old: dict, new: dict) -> tuple[list, list, list]:
@@ -189,10 +238,10 @@ def reconcile_deletions() -> int:
             conn.rollback()
             raise
 
-        # Pruned meetings must drop out of the derived index notes too. Entity
-        # pages (People/Projects) are left in place -- they may still reference
-        # other surviving meetings -- but regenerating recomputes their meeting
-        # lists correctly since meeting_entities cascade-deleted above.
+        # Pruned meetings must drop out of the derived surfaces too. Ratified
+        # entity pages are the user's and are never deleted here; regenerating
+        # recomputes the rollup block on each (and the queue note's provenance)
+        # correctly, since meeting_entities cascade-deleted above.
         try:
             enrich.regenerate_index_notes(conn)
         except Exception as e:
@@ -236,7 +285,15 @@ def main() -> None:
     except Exception as e:
         log(f"startup cycle ERROR {type(e).__name__}: {e}")
 
+    # Startup registry pass: picks up entity-page/Profile edits and queue
+    # checkmarks made while the watcher wasn't running.
+    try:
+        registry_sync("startup")
+    except Exception as e:
+        log(f"registry startup ERROR {type(e).__name__}: {e}")
+
     last = snapshot()
+    last_reg = registry_snapshot()  # taken AFTER sync, so our own writes don't re-trigger
 
     while _running:
         time.sleep(POLL_INTERVAL)
@@ -252,6 +309,14 @@ def main() -> None:
                     break
                 run_pipeline("change")
                 last = snapshot()
+
+            # Registry watch: user edits to entity pages, Profile.md, or the
+            # governance queue note. Mtime comparison only until something
+            # actually changed, so the quiet path stays free.
+            cur_reg = registry_snapshot()
+            if cur_reg != last_reg:
+                registry_sync("vault-edit")
+                last_reg = registry_snapshot()
         except Exception as e:
             log(f"cycle ERROR {type(e).__name__}: {e}")
 

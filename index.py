@@ -30,6 +30,9 @@ import config
 import db as dbmod
 import sqlite_vec
 
+# Re-exported for tools/mapcheck.py's truth gate (same pattern as ask.py):
+# the Map must name the model this file actually embeds with.
+EMBED_MODEL = config.EMBED_MODEL
 
 BATCH_SIZE = 16          # chunks per Ollama call
 EST_SECONDS_PER_CHUNK = 0.5   # rough prior; replaced by a live measurement after batch 1
