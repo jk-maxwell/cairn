@@ -33,11 +33,13 @@ def truths():
     """
     sys.path.insert(0, str(ROOT))
     import ask
-    import index
+    import config
     return {
         "generation model (ask.GEN_MODEL)": ask.GEN_MODEL,
         "embedding model (ask.EMBED_MODEL)": ask.EMBED_MODEL,
-        "embedding model (index.EMBED_MODEL)": index.EMBED_MODEL,
+        # index.py reads config.EMBED_MODEL directly (it no longer re-exports
+        # it), so the shared source of truth is what the Map must state.
+        "embedding model (config.EMBED_MODEL)": config.EMBED_MODEL,
     }
 
 

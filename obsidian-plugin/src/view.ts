@@ -57,7 +57,11 @@ export class CairnChatView extends ItemView {
 		const inputRow = root.createDiv({ cls: "cairn-input-row" });
 		this.inputEl = inputRow.createEl("textarea", {
 			cls: "cairn-input",
-			attr: { placeholder: "Ask your notes…", rows: "3" },
+			attr: {
+				placeholder:
+					"Ask your notes… (/interview to set up, /checkin for a status update)",
+				rows: "3",
+			},
 		});
 		this.sendBtn = inputRow.createEl("button", {
 			cls: "cairn-send mod-cta",
@@ -79,9 +83,13 @@ export class CairnChatView extends ItemView {
 
 	private renderEmptyState(): void {
 		this.messagesEl.empty();
-		this.messagesEl.createDiv({
-			cls: "cairn-empty",
+		const empty = this.messagesEl.createDiv({ cls: "cairn-empty" });
+		empty.createDiv({
 			text: "Ask a question about your notes to get started.",
+		});
+		empty.createDiv({
+			cls: "cairn-empty-hint",
+			text: "/interview — set Cairn up (role, projects, people) · /checkin — status update · /cancel — abandon an interview",
 		});
 	}
 

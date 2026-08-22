@@ -49,7 +49,12 @@ On the protocol faces, the client's system prompt, sampling settings, and model 
 | `ingest.py` | `sources/` to `vault/` and chunk rows; content-hash change detection; source URL derivation |
 | `index.py` | Embeds pending chunks into `vec_chunks`; dry-run and reset modes; dimension gate |
 | `frontdoor.py` | The deterministic lane before retrieval: chatter, holdings, and capability answered from templates plus SQL with no model call; the no-hope distance floor; the nearest-headings steering list |
-| `ask.py` | Retrieval, grounded synthesis, citations, strength label, streaming web interface, local-model protocol surface (OpenAI and Ollama shapes), one-shot command line |
+| `ask.py` | Retrieval, grounded synthesis, citations, strength label, streaming web interface, local-model protocol surface (OpenAI and Ollama shapes), interview routing (/interview, /checkin), one-shot command line |
+| `enrich.py` | Semantic enrichment of meeting transcripts: entities, front-matter metadata, a marked machine-contributions block, distillation drafts, derived index notes under `Cairn/` |
+| `watch.py` | Automatic ingestion: watches `sources/`, runs convert/index on arrival, reconciles deletions |
+| `interview.py` | The interview engine: onboarding (/interview) and status check-in (/checkin) run in the plugin chat; flow state reconstructed from the message history via invisible markers; the model only parses answers; confirmation of the playback is the ratification and the only write path |
+| `interview_registry_stub.py` | Thin working stand-ins for `registry.py` (scan_vault, match, propose, ratify, reject, write_queue_note) plus the entities status/origin migration; swapped out when the real registry module lands |
+| `test_interview.py` | Scripted end-to-end test of the interview engine on a scratch port with a temp DB and temp vault: full canned onboarding, seeded check-in, cancel, and normal-question routing |
 | `selftest.py` | Preflights the whole pipeline against real models. Twenty gates covering dependencies, retrieval, grounding, citation integrity, the front door, the protocol surface, and a frozen-prompt speed benchmark |
 | `tools/mapcheck.py` | Fails if any tracked code file is missing from this map, or if this map names models the code does not use |
 
