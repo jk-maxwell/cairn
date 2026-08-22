@@ -19,7 +19,7 @@ If you find yourself writing "this obviously works," that is the moment to write
 ## Running the checks
 
 ```bash
-python selftest.py        # 20 gates: dependencies, retrieval, grounding, protocol, speed
+python selftest.py        # 21 gates: dependencies, retrieval, grounding, registry, protocol, speed
 python tools/mapcheck.py  # every code file must be documented in MAP.md
 ```
 

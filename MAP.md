@@ -46,12 +46,16 @@ On the protocol faces, the client's system prompt, sampling settings, and model 
 | --- | --- |
 | `config.py` | Paths, chunking parameters, `EMBEDDING_DIM`, supported file types, default records status |
 | `db.py` | SQLite schema (documents, chunks) and connection; WAL mode; idempotent migration |
-| `ingest.py` | `sources/` to `vault/` and chunk rows; content-hash change detection; source URL derivation |
+| `ingest.py` | `sources/` to `vault/` and chunk rows; content-hash change detection; source URL derivation; meeting notes get clean titles, front matter (attendees, project, topic tags), and the enrichment pass |
+| `enrich.py` | Meeting-transcript enrichment via the local generation model: extraction (attendees, projects, topics, decisions, commitments), the one marked machine block on each meeting note, the distillation draft in `Inbox/`, and the derived index notes (`Cairn/Home.md`, `Cairn/Meetings.md`). Extracted names resolve through `registry.py`: ratified names become links, everything else becomes a governance proposal |
+| `registry.py` | The vault-authoritative entity registry and governance queue. Ratified entity pages (`Projects/`, `People/`, `Profile.md`) ARE the registry; `scan_vault` rebuilds the DB index from them, `match` is a read-only lookup against ratified structure, `propose`/`ratify`/`reject` run the queue, `Inbox/Governance.md` is the checkbox review surface, and rollup blocks between the cairn markers are the only machine-owned region of a ratified page. `--migrate` converts a pre-governance database |
 | `index.py` | Embeds pending chunks into `vec_chunks`; dry-run and reset modes; dimension gate |
+| `watch.py` | Polling watcher: ingest + deletion reconcile + index on `sources/` changes; registry sync (vault scan, queue edits, rollups) on entity-page/queue edits |
 | `frontdoor.py` | The deterministic lane before retrieval: chatter, holdings, and capability answered from templates plus SQL with no model call; the no-hope distance floor; the nearest-headings steering list |
 | `ask.py` | Retrieval, grounded synthesis, citations, strength label, streaming web interface, local-model protocol surface (OpenAI and Ollama shapes), one-shot command line |
-| `selftest.py` | Preflights the whole pipeline against real models. Twenty gates covering dependencies, retrieval, grounding, citation integrity, the front door, the protocol surface, and a frozen-prompt speed benchmark |
+| `selftest.py` | Preflights the whole pipeline against real models. Twenty-one gates covering dependencies, retrieval, grounding, citation integrity, the front door, the registry/governance contract, the protocol surface, and a frozen-prompt speed benchmark |
 | `tools/mapcheck.py` | Fails if any tracked code file is missing from this map, or if this map names models the code does not use |
+| `tools/test_registry.py` | Registry/governance acceptance CLI: thirteen cases against a temp vault and temp DB with the model stubbed -- match never inserts, proposals dedupe and respect rejection, checkbox ratifies, deleted line rejects forever, re-enrichment is idempotent, rollups touch only the marked block, migrate converts a pre-governance database |
 
 ### Generated locally, never committed
 

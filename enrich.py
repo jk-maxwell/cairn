@@ -9,17 +9,26 @@ skip, so re-running ingest on unchanged sources never re-enriches, never
 duplicates entities, blocks, or drafts.
 
 Thesis constraints this module exists to honor (see docs/THESIS.md sections
-2, 3, 5, 6):
+2, 3, 5, 6, and the 2026-08-22 governance decisions in docs/DECISIONS.md):
   - Personal content is never rewritten. The meeting note's body is the
     verbatim converted transcript; every machine contribution lands either
     in front matter or in the one clearly marked block appended at the end.
     No inline [[links]] woven into the transcript text.
+  - Structure is user-authored; the engine conforms. Extracted names go
+    through registry.match against RATIFIED entities only: a match becomes
+    a wikilink to the user-owned entity page, anything else becomes a
+    registry.propose() row in the governance queue and stays plain text --
+    no page, no link, no embedding until a human ratifies. Discussion
+    topics are journaled-tier: they land as front-matter tags on the
+    meeting note, never as entities or proposals.
   - Distillation output is a draft awaiting ratification. Drafts are written
     to Inbox/, never to sources/, so they never enter the documents/chunks
     tables and are never embedded or citable.
-  - Derived index notes (Cairn/Home.md, Cairn/Meetings.md, Cairn/People/*,
-    Cairn/Projects/*) are marked generated and fully regenerable from the
-    entities table, the documents table, and the vault files on disk.
+  - Derived index notes (Cairn/Home.md, Cairn/Meetings.md) are marked
+    generated and fully regenerable. The old generated Cairn/People and
+    Cairn/Projects pages are retired: ratified user-owned pages at the
+    vault root replace them, with registry.regenerate_rollups() rewriting
+    only the marked block on each.
 
 Uses Ollama chat (config.OLLAMA_CHAT_URL / config.GEN_MODEL) with strict
 JSON-output prompting, one retry on malformed output, and graceful
@@ -28,7 +37,6 @@ a logged warning and ingest continues (the note is still written, just
 without attendees/projects/block/draft).
 """
 
-import hashlib
 import json
 import re
 import urllib.error
@@ -36,6 +44,7 @@ import urllib.request
 from pathlib import Path
 
 import config
+import registry
 
 # ---- model call -------------------------------------------------------------
 
@@ -53,21 +62,20 @@ SYSTEM_PROMPT = (
     "Output ONLY a single JSON object -- no prose, no markdown code fences, no explanation "
     "before or after it. If a field has nothing to report, use an empty list. "
     "Never invent facts not present in the transcript. Use people's full names as spoken "
-    "in the transcript; do not guess a surname that was never said.\n\n"
+    "in the transcript; do not guess a surname that was never said. "
+    "A project is a named initiative or product the speakers own or work on; a subject "
+    "that was merely discussed belongs in topics, never in projects.\n\n"
     "JSON schema (all keys required, use [] when empty):\n"
     "{\n"
     '  "attendees": ["<person name>", ...],\n'
     '  "projects": ["<project or product name>", ...],\n'
+    '  "topics": ["<discussion topic, 1-4 words>", ...],\n'
     '  "decisions": ["<one-sentence decision>", ...],\n'
     '  "commitments": [{"owner": "<name>", "task": "<what they owe>", "due": "<date or empty string>"}],\n'
     '  "action_items": [{"owner": "<name or empty string>", "task": "<what>"}],\n'
     '  "open_questions": ["<open question>", ...]\n'
     "}\n"
 )
-
-
-def _sha1(text: str) -> str:
-    return hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()
 
 
 def _chat(messages: list[dict]) -> str | None:
@@ -135,6 +143,7 @@ def _coerce(obj: dict) -> dict:
     return {
         "attendees": strs(obj.get("attendees")),
         "projects": strs(obj.get("projects")),
+        "topics": strs(obj.get("topics")),
         "decisions": strs(obj.get("decisions")),
         "commitments": items(obj.get("commitments"), ["owner", "task", "due"]),
         "action_items": items(obj.get("action_items"), ["owner", "task"]),
@@ -173,71 +182,29 @@ def sanitize_filename(name: str) -> str:
     return cleaned or "untitled"
 
 
-# ---- entity canonicalization --------------------------------------------------
+# ---- topic tags ----------------------------------------------------------------
+# Discussion topics are journaled-tier: normalized to kebab-case front-matter
+# tags on the meeting note. No entity row, no proposal, no page -- searchable
+# at zero ratification cost, which is what keeps the governance inbox small.
 
-def _tokens(s: str) -> list[str]:
-    return s.lower().split()
-
-
-def _is_name_variant(short: str, long_: str) -> bool:
-    """True if `short` looks like a shorter form of `long_`: a word-prefix
-    ("Ann" of "Ann Ortega") or a plain substring ("Ori" of "Orion")."""
-    st, lt = _tokens(short), _tokens(long_)
-    if not st or not lt:
-        return False
-    if lt[:len(st)] == st:
-        return True
-    return short.lower() in long_.lower()
+_TAG_STRIP_RE = re.compile(r'[^a-z0-9]+')
 
 
-def canonicalize_entity(conn, name: str, etype: str) -> str | None:
-    """
-    Match `name` against existing entities of `etype`:
-      1. case-insensitive exact match on canonical name or an alias -> return as-is
-      2. `name` is a shorter variant of an existing canonical name -> folds in as
-         an alias of that entity; the longer canonical name is returned
-      3. `name` is a longer variant of an existing canonical name -> the entity's
-         canonical name is upgraded to `name`, the old canonical becomes an alias
-      4. no match -> a new entity row is inserted, canonical = name as given
-    Always returns the canonical name that should be used for links/front matter.
-    """
-    name = (name or "").strip()
-    if not name:
-        return None
-    name_lower = name.lower()
-    rows = conn.execute(
-        "SELECT entity_id, name, aliases FROM entities WHERE type=?", (etype,)
-    ).fetchall()
+def topic_tag(topic: str) -> str | None:
+    tag = _TAG_STRIP_RE.sub('-', (topic or "").lower()).strip('-')
+    tag = re.sub(r'-{2,}', '-', tag)
+    if not tag or len(tag) > 60 or not re.search(r'[a-z]', tag):
+        return None  # empty, absurdly long, or all-numeric: not a usable tag
+    return tag
 
-    for entity_id, canon_name, aliases_json in rows:
-        aliases = json.loads(aliases_json or "[]")
-        if name_lower == canon_name.lower() or name_lower in (a.lower() for a in aliases):
-            return canon_name
 
-    for entity_id, canon_name, aliases_json in rows:
-        aliases = json.loads(aliases_json or "[]")
-        if len(name) <= len(canon_name) and _is_name_variant(name, canon_name):
-            if name not in aliases:
-                aliases.append(name)
-                conn.execute("UPDATE entities SET aliases=? WHERE entity_id=?",
-                             (json.dumps(aliases), entity_id))
-                conn.commit()
-            return canon_name
-        if len(name) > len(canon_name) and _is_name_variant(canon_name, name):
-            if canon_name not in aliases:
-                aliases.append(canon_name)
-            conn.execute("UPDATE entities SET name=?, aliases=? WHERE entity_id=?",
-                         (name, json.dumps(aliases), entity_id))
-            conn.commit()
-            return name
-
-    entity_id = _sha1(f"{etype}:{name_lower}")[:16]
-    conn.execute(
-        "INSERT INTO entities (entity_id, name, type, aliases, note_path) VALUES (?,?,?,?,?)",
-        (entity_id, name, etype, "[]", None),
-    )
-    conn.commit()
-    return name
+def topic_tags(topics: list[str]) -> list[str]:
+    out = []
+    for t in topics or []:
+        tag = topic_tag(t)
+        if tag and tag not in out:
+            out.append(tag)
+    return out
 
 
 # ---- Gemini export conversion cleanup ------------------------------------------
@@ -246,18 +213,15 @@ _GEMINI_ACTION_RE = re.compile(r'^(\s*- \[ \] )\\\[(.+?)\\\]', flags=re.MULTILIN
 
 
 def lookup_canonical(conn, name: str) -> str | None:
-    """Read-only entity lookup by canonical name or alias, people before
-    projects. Unlike canonicalize_entity, never inserts or mutates anything."""
-    name_lower = (name or "").strip().lower()
-    if not name_lower:
+    """Read-only lookup against RATIFIED entities only, people before
+    projects. Never inserts or mutates anything -- unratified names must not
+    acquire links (registry decision, 2026-08-22)."""
+    if not (name or "").strip():
         return None
     for etype in ("person", "project"):
-        for canon_name, aliases_json in conn.execute(
-            "SELECT name, aliases FROM entities WHERE type=?", (etype,)
-        ).fetchall():
-            aliases = json.loads(aliases_json or "[]")
-            if name_lower == canon_name.lower() or name_lower in (a.lower() for a in aliases):
-                return canon_name
+        canonical = registry.match(conn, name, etype)
+        if canonical:
+            return canonical
     return None
 
 
@@ -266,9 +230,12 @@ def linkify_gemini_artifacts(conn, text: str) -> str:
     applied ONLY to the note body written into the vault -- never to the source
     file and never to the chunked/embedded text. Two rules:
 
-      1. Gemini's action attribution `- [ ] \\[Name\\]` becomes a real wikilink,
-         canonicalized through the entity registry: `- [ ] [[Canonical|Name]]`
-         (plain `[[Name]]` when the name is already canonical or unknown).
+      1. Gemini's action attribution `- [ ] \\[Name\\]` becomes a real wikilink
+         ONLY when the name matches a ratified registry entity:
+         `- [ ] [[Canonical|Name]]` (or `[[Name]]` when already canonical).
+         An unratified name stays plain text -- the engine links into
+         user-ratified structure and never mints a link to a page that does
+         not exist.
       2. Leftover `\\[` / `\\]` escape artifacts unescape to plain brackets.
 
     This is import-time conversion, not a post-hoc rewrite of personal content:
@@ -278,7 +245,11 @@ def linkify_gemini_artifacts(conn, text: str) -> str:
     def _repl(m):
         prefix, name = m.group(1), m.group(2).strip()
         canonical = lookup_canonical(conn, name)
-        if canonical and canonical != name:
+        if canonical is None:
+            # Not ratified: no wikilink. Keep Gemini's own [Name] attribution
+            # style, just unescaped -- plain brackets, not a link.
+            return f"{prefix}[{name}]"
+        if canonical != name:
             return f"{prefix}[[{canonical}|{name}]]"
         return f"{prefix}[[{name}]]"
 
@@ -291,7 +262,11 @@ def linkify_gemini_artifacts(conn, text: str) -> str:
 def build_cairn_block(enrich_result: dict) -> str:
     """The one clearly marked block appended after the verbatim transcript body.
     Everything the machine contributes to a personal note lives here (or in
-    front matter) -- never woven inline into the transcript text."""
+    front matter) -- never woven inline into the transcript text. Only names
+    matched against RATIFIED registry entities become wikilinks; unmatched
+    names (which registry.propose sent to the governance queue) stay plain
+    text, because a link to a page that does not exist would be the engine
+    minting structure."""
     lines = [
         "",
         "",
@@ -300,13 +275,19 @@ def build_cairn_block(enrich_result: dict) -> str:
         "*Generated by Cairn — links and context. The transcript above is untouched.*",
         "",
     ]
+    linked_people = enrich_result.get("linked_people") or set()
+    linked_projects = enrich_result.get("linked_projects") or set()
+
+    def render(name, linked):
+        return f"[[{name}]]" if name in linked else name
+
     attendees = enrich_result.get("attendees") or []
     projects = enrich_result.get("projects") or []
     if attendees:
-        lines.append("**Attendees**: " + ", ".join(f"[[{a}]]" for a in attendees))
+        lines.append("**Attendees**: " + ", ".join(render(a, linked_people) for a in attendees))
     if projects:
         label = "Project" if len(projects) == 1 else "Projects"
-        lines.append(f"**{label}**: " + ", ".join(f"[[{p}]]" for p in projects))
+        lines.append(f"**{label}**: " + ", ".join(render(p, linked_projects) for p in projects))
     lines.append(f"**Distillation**: [[{enrich_result['distillation']}]]")
     lines.append("<!-- cairn:end -->")
     lines.append("")
@@ -367,10 +348,14 @@ def write_distillation_draft(title: str, result: dict) -> str:
 
 def enrich_meeting(conn, doc_id: str, source: Path, title: str, text: str) -> dict | None:
     """
-    Runs the model, canonicalizes attendees/projects into the entities table,
-    records the doc<->entity relationship, and writes the distillation draft.
-    Returns {"attendees": [...], "projects": [...], "distillation": "<stem>"}
-    on success, or None if enrichment could not be completed (ingest continues
+    Runs the model, resolves attendees/projects against the RATIFIED registry
+    (registry.match -- read-only), files a governance proposal for anything
+    unmatched (registry.propose -- no page, no link), records the doc<->entity
+    relationship for matched entities, and writes the distillation draft.
+
+    Returns {"attendees": [...], "projects": [...], "linked_people": set,
+    "linked_projects": set, "topics": [tags], "distillation": "<stem>"} on
+    success, or None if enrichment could not be completed (ingest continues
     regardless -- the note is still written, just without the block/draft).
     """
     result = extract(text)
@@ -379,31 +364,59 @@ def enrich_meeting(conn, doc_id: str, source: Path, title: str, text: str) -> di
               f"(model did not return valid JSON after retry)")
         return None
 
-    attendees = sorted(
-        {c for n in result["attendees"] if (c := canonicalize_entity(conn, n, "person"))},
-        key=str.lower,
-    )
-    projects = sorted(
-        {c for n in result["projects"] if (c := canonicalize_entity(conn, n, "project"))},
-        key=str.lower,
-    )
-
+    # Rewritten wholesale per doc: matched links are re-recorded below, and
+    # registry.propose re-records proposal provenance as it runs.
     conn.execute("DELETE FROM meeting_entities WHERE doc_id=?", (doc_id,))
-    for etype, names in (("person", attendees), ("project", projects)):
-        for name in names:
-            row = conn.execute(
-                "SELECT entity_id FROM entities WHERE type=? AND name=?", (etype, name)
-            ).fetchone()
-            if row:
-                conn.execute(
-                    "INSERT OR IGNORE INTO meeting_entities (doc_id, entity_id) VALUES (?,?)",
-                    (doc_id, row[0]),
-                )
     conn.commit()
+
+    names: dict[str, list[str]] = {}
+    linked: dict[str, set[str]] = {}
+    proposed_count = 0
+    for etype, key in (("person", "attendees"), ("project", "projects")):
+        names[key], linked[key] = [], set()
+        seen = set()
+        for raw in result[key]:
+            raw = raw.strip()
+            if not raw or raw.lower() in seen:
+                continue
+            seen.add(raw.lower())
+            canonical = registry.match(conn, raw, etype)
+            if canonical:
+                if canonical not in names[key]:
+                    names[key].append(canonical)
+                linked[key].add(canonical)
+                row = conn.execute(
+                    "SELECT entity_id FROM entities WHERE type=? AND name=? AND status='ratified'",
+                    (etype, canonical),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO meeting_entities (doc_id, entity_id) VALUES (?,?)",
+                        (doc_id, row[0]),
+                    )
+            else:
+                if registry.propose(conn, raw, etype, doc_id):
+                    proposed_count += 1
+                if raw not in names[key]:
+                    names[key].append(raw)
+        names[key].sort(key=str.lower)
+    conn.commit()
+
+    tags = topic_tags(result.get("topics") or [])
+    print(f"  enrich: {source.name}: linked {len(linked['attendees'])} people / "
+          f"{len(linked['projects'])} projects, proposed {proposed_count}, "
+          f"{len(tags)} topic tag(s)")
 
     distill_stem = write_distillation_draft(title, result)
 
-    return {"attendees": attendees, "projects": projects, "distillation": distill_stem}
+    return {
+        "attendees": names["attendees"],
+        "projects": names["projects"],
+        "linked_people": linked["attendees"],
+        "linked_projects": linked["projects"],
+        "topics": tags,
+        "distillation": distill_stem,
+    }
 
 
 # ---- derived index notes -------------------------------------------------------
@@ -454,49 +467,34 @@ def regenerate_meetings_index(conn) -> None:
     _write_generated(config.VAULT_DIR / "Cairn" / "Meetings.md", "type: meeting-index\n", "\n".join(lines))
 
 
-def _entity_meeting_titles(conn, entity_id: str) -> list[str]:
-    rows = conn.execute(
-        "SELECT d.vault_path FROM meeting_entities me "
-        "JOIN documents d ON d.doc_id = me.doc_id WHERE me.entity_id=?",
-        (entity_id,),
-    ).fetchall()
-    titles = []
-    for (vp,) in rows:
-        if vp and Path(vp).exists():
-            titles.append(Path(vp).stem)
-    return sorted(titles)
-
-
-def regenerate_entity_pages(conn) -> None:
-    rows = conn.execute("SELECT entity_id, name, type, aliases FROM entities").fetchall()
-    for entity_id, name, etype, aliases_json in rows:
-        aliases = json.loads(aliases_json or "[]")
-        meetings = _entity_meeting_titles(conn, entity_id)
-        folder = "People" if etype == "person" else "Projects"
-        note_path = config.VAULT_DIR / "Cairn" / folder / f"{sanitize_filename(name)}.md"
-
-        context = f"Also known as: {', '.join(aliases)}. " if aliases else ""
-        context += f"Appears in {len(meetings)} meeting note{'s' if len(meetings) != 1 else ''}."
-
-        lines = [f"# {name}", "", context, "", "## Meetings"]
-        lines += [f"- [[{t}]]" for t in meetings] if meetings else ["*(none yet)*"]
-
-        _write_generated(note_path, f"type: {etype}\n", "\n".join(lines))
-        conn.execute("UPDATE entities SET note_path=? WHERE entity_id=?", (str(note_path), entity_id))
-    conn.commit()
+# The old regenerate_entity_pages (generated Cairn/People/* and
+# Cairn/Projects/* pages) is RETIRED: ratified user-owned pages at the vault
+# root replace that layer, and their per-entity meeting rollup lives inside
+# the cairn-marked block, rewritten by registry.regenerate_rollups() only.
 
 
 def regenerate_home(conn) -> None:
+    """Home links only RATIFIED structure -- the user-owned vault-root pages.
+    Proposals are deliberately absent: they live in Inbox/Governance.md until
+    a human rules on them."""
     people = conn.execute(
-        "SELECT name FROM entities WHERE type='person' ORDER BY name COLLATE NOCASE"
+        "SELECT name FROM entities WHERE type='person' AND status='ratified' "
+        "ORDER BY name COLLATE NOCASE"
     ).fetchall()
     projects = conn.execute(
-        "SELECT name FROM entities WHERE type='project' ORDER BY name COLLATE NOCASE"
+        "SELECT name FROM entities WHERE type='project' AND status='ratified' "
+        "ORDER BY name COLLATE NOCASE"
     ).fetchall()
+    pending = conn.execute(
+        "SELECT COUNT(*) FROM entities WHERE status='proposed'"
+    ).fetchone()[0]
     inbox_dir = config.VAULT_DIR / "Inbox"
     drafts = sorted((p.stem for p in inbox_dir.glob("*.md")), key=str.lower) if inbox_dir.exists() else []
 
-    lines = ["# Cairn Home", "", "- [[Meetings]]", "", "## People"]
+    lines = ["# Cairn Home", "", "- [[Meetings]]"]
+    if pending:
+        lines.append(f"- [[Governance]] — {pending} proposal(s) awaiting review")
+    lines += ["", "## People"]
     lines += [f"- [[{n}]]" for (n,) in people] or ["*(none yet)*"]
     lines += ["", "## Projects"]
     lines += [f"- [[{n}]]" for (n,) in projects] or ["*(none yet)*"]
@@ -507,9 +505,14 @@ def regenerate_home(conn) -> None:
 
 
 def regenerate_index_notes(conn) -> None:
-    """Regenerates every derived index note under Cairn/ from current DB +
-    vault-on-disk state. Fully idempotent, cheap, safe to call unconditionally
-    after every ingest run and after every prune."""
+    """Regenerates every derived surface from current DB + vault-on-disk
+    state: the Cairn/ index notes, the governance queue note, and the marked
+    rollup blocks on ratified entity pages. Applies any pending queue edits
+    FIRST so a user's checkmark or deletion is never overwritten by the
+    rewrite. Idempotent, cheap, safe to call unconditionally after every
+    ingest run and after every prune."""
+    registry.apply_queue_edits(conn, config.VAULT_DIR)
     regenerate_meetings_index(conn)
-    regenerate_entity_pages(conn)
     regenerate_home(conn)
+    registry.write_queue_note(conn, config.VAULT_DIR)
+    registry.regenerate_rollups(conn, config.VAULT_DIR)

@@ -18,6 +18,7 @@ import threading
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 
 import config
 import db as dbmod
@@ -460,6 +461,72 @@ def t_no_hope_floor():
             f"answers below it, steering list attached")
 
 
+def t_registry_governance():
+    """
+    The engine may only LINK into user-ratified structure; anything new is a
+    proposal in the governance queue (decisions of 2026-08-22). Deterministic,
+    no model call: a temp vault and temp DB, gone when the gate ends.
+    """
+    import shutil
+    import sqlite3
+    import tempfile
+    import registry
+
+    tmp = Path(tempfile.mkdtemp(prefix="cairn-selftest-registry-"))
+    try:
+        conn = sqlite3.connect(tmp / "t.db")
+        conn.execute("PRAGMA foreign_keys = ON")
+        dbmod.init_db(conn)
+        vault = tmp / "vault"
+        (vault / "Projects").mkdir(parents=True)
+        (vault / "Projects" / "Fixture Project.md").write_text(
+            "---\ncairn-type: project\naliases: [FixProj]\n---\n", encoding="utf-8")
+        registry.scan_vault(conn, vault)
+
+        # match resolves ratified structure and never inserts
+        if registry.match(conn, "fixproj", "project") != "Fixture Project":
+            raise RuntimeError("alias lookup against a ratified page failed")
+        before = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+        if registry.match(conn, "Unheard Of", "project") is not None:
+            raise RuntimeError("match invented a canonical name")
+        if conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] != before:
+            raise RuntimeError("match() inserted a row")
+
+        # a novel name becomes a proposal: no page until the human checks the box
+        if not registry.propose(conn, "Unheard Of", "project", None):
+            raise RuntimeError("propose() refused a novel name")
+        if registry.propose(conn, "unheard of", "project", None):
+            raise RuntimeError("propose() duplicated a pending proposal")
+        registry.write_queue_note(conn, vault)
+        note = vault / "Inbox" / "Governance.md"
+        text = note.read_text(encoding="utf-8")
+        if "- [ ] **Unheard Of**" not in text:
+            raise RuntimeError("proposal missing from the governance queue note")
+        if (vault / "Projects" / "Unheard Of.md").exists():
+            raise RuntimeError("a page existed before ratification")
+
+        # checked box -> ratified page; deleted line -> rejected forever
+        note.write_text(text.replace("- [ ] **Unheard Of**", "- [x] **Unheard Of**"),
+                        encoding="utf-8")
+        edits = registry.apply_queue_edits(conn, vault)
+        if edits["ratified"] != ["Unheard Of"] or not (vault / "Projects" / "Unheard Of.md").exists():
+            raise RuntimeError(f"checkbox did not ratify: {edits}")
+        registry.propose(conn, "Discarded Idea", "project", None)
+        registry.write_queue_note(conn, vault)
+        kept = [l for l in note.read_text(encoding="utf-8").splitlines()
+                if "Discarded Idea" not in l]
+        note.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        edits = registry.apply_queue_edits(conn, vault)
+        if edits["rejected"] != ["Discarded Idea"]:
+            raise RuntimeError(f"deleted line did not reject: {edits}")
+        if registry.propose(conn, "Discarded Idea", "project", None):
+            raise RuntimeError("a rejected name was re-proposed")
+        conn.close()
+        return "match links ratified only; propose/ratify/reject round-trip holds"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def t_strength_labels():
     """The deterministic retrieval-strength mapping behaves as designed."""
     cases = [(0.5, "Strong"), (0.80, "Strong"), (0.85, "Moderate"),
@@ -757,6 +824,7 @@ def main():
         ("Front door: chatter costs no retrieval and no model", t_frontdoor_no_model),
         ("Retrieval: no-hope floor skips the model", t_no_hope_floor),
         ("Retrieval-strength labels", t_strength_labels),
+        ("Registry: engine links ratified structure, never invents it", t_registry_governance),
         ("Protocol: cairn is a selectable model", t_protocol_discovery),
         ("Protocol: contract holds against a hostile client", t_protocol_contract),
         ("Protocol: CORS allowlist", t_protocol_cors),

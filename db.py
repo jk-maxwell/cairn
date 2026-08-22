@@ -44,21 +44,27 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT
 );
 
--- Canonical entities (people, projects) discovered by enrich.py while
--- enriching meeting notes. A new extracted name that is a case-insensitive
--- exact match, or a prefix/substring variant, of an existing entity folds
--- into that entity's aliases instead of creating a duplicate row -- see
--- enrich.canonicalize_entity(). note_path is filled in when the derived
--- Cairn/People or Cairn/Projects page for this entity is (re)generated.
+-- The entity registry's derived index. The registry itself lives in the
+-- vault: ratified entity pages are user-owned files under Projects/ and
+-- People/ (plus Profile.md) whose front matter (cairn-type, aliases,
+-- status) is authoritative; registry.scan_vault() rebuilds the ratified
+-- rows here from those pages. The engine never invents structure: an
+-- extracted name that matches nothing ratified becomes a status='proposed'
+-- row (registry.propose) awaiting the governance queue, and a rejected
+-- proposal is kept as status='rejected' so it is never re-proposed.
 CREATE TABLE IF NOT EXISTS entities (
     entity_id  TEXT PRIMARY KEY,
-    name       TEXT NOT NULL,       -- canonical name, as currently best known
+    name       TEXT NOT NULL,       -- canonical name (page name for ratified rows)
     type       TEXT NOT NULL,       -- person | project
-    aliases    TEXT DEFAULT '[]',   -- JSON array of alternate names folded into this entity
-    note_path  TEXT                 -- vault path to the generated Cairn/People|Projects page
+    aliases    TEXT DEFAULT '[]',   -- JSON array of alternate names (from page front matter)
+    note_path  TEXT,                -- vault path to the ratified entity page (NULL until ratified)
+    status     TEXT NOT NULL DEFAULT 'ratified',  -- ratified | proposed | rejected
+    origin     TEXT                 -- interview | extraction | seed
 );
 
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+-- idx_entities_status is created in _migrate(), after the status column is
+-- guaranteed to exist on databases that predate it.
 
 -- Many-to-many: which meeting documents mention which entities. Rewritten
 -- wholesale for a doc_id each time that document is (re)enriched, and
@@ -92,6 +98,18 @@ def _migrate(conn):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
     if "source_url" not in cols:
         conn.execute("ALTER TABLE documents ADD COLUMN source_url TEXT")
+
+    # Governance columns (2026-08-22, "Structure is user-authored; the engine
+    # conforms"). Pre-governance rows default to 'ratified' here only so the
+    # ALTER is valid on a NOT NULL column; the one-time registry.py --migrate
+    # then converts every pre-existing row to 'proposed' so nothing the old
+    # insert-on-miss extractor invented counts as ratified structure.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(entities)")}
+    if "status" not in cols:
+        conn.execute("ALTER TABLE entities ADD COLUMN status TEXT NOT NULL DEFAULT 'ratified'")
+    if "origin" not in cols:
+        conn.execute("ALTER TABLE entities ADD COLUMN origin TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_status ON entities(status)")
 
 
 # ---- meta key/value helpers -------------------------------------------------

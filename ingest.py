@@ -100,6 +100,10 @@ def meeting_front_matter(source: Path, doc_id: str, title: str, enrich_result: d
     date = m.group(1) if m else iso(source.stat().st_mtime)[:10]
     attendees = enrich_result["attendees"] if enrich_result else []
     projects = enrich_result["projects"] if enrich_result else []
+    # Discussion topics land as journaled-tier front-matter tags (already
+    # kebab-normalized by enrich.topic_tags): searchable, no entity, no
+    # proposal, no page -- see the 2026-08-22 registry decision.
+    tags = (enrich_result.get("topics") or []) if enrich_result else []
 
     def yaml_list(items):
         return "[" + ", ".join(f'"{i}"' for i in items) + "]" if items else "[]"
@@ -112,6 +116,7 @@ def meeting_front_matter(source: Path, doc_id: str, title: str, enrich_result: d
         "type: meeting\n"
         f"attendees: {yaml_list(attendees)}\n"
         f"project: {yaml_list(projects)}\n"
+        f"tags: {yaml_list(tags)}\n"
         f"source: {source.name}\n"
         f"source_modified: {iso(source.stat().st_mtime)}\n"
         f"converted: {iso()}\n"
@@ -386,13 +391,14 @@ def main():
         if pending:
             print(f"{pending} chunk(s) awaiting embedding. Next step: the index build.")
 
-        # Regenerate every derived index note (Cairn/Home.md, Meetings.md, People/*,
-        # Projects/*) from current DB + vault-on-disk state. Cheap, idempotent, and
-        # unconditional so it stays correct even on a run that ingested nothing new.
+        # Regenerate every derived surface (Cairn/Home.md, Cairn/Meetings.md,
+        # Inbox/Governance.md, ratified-page rollup blocks) from current DB +
+        # vault-on-disk state. Cheap, idempotent, and unconditional so it stays
+        # correct even on a run that ingested nothing new.
         try:
             enrich.regenerate_index_notes(conn)
         except Exception as e:
-            print(f"WARN: could not regenerate Cairn/ index notes: {type(e).__name__}: {e}")
+            print(f"WARN: could not regenerate derived notes: {type(e).__name__}: {e}")
 
     if failures:
         log = config.VAULT_DIR / "_ingest_failures.log"
