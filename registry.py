@@ -173,6 +173,22 @@ def _match_in(rows, name: str) -> str | None:
     return None
 
 
+def ensure_entity_columns(conn) -> None:
+    """Idempotent guard for callers holding a connection that may predate the
+    governance schema: entities gains status (ratified|proposed|rejected) and
+    origin (interview|extraction|seed). db._migrate() does the same for
+    connections opened through db.py; this covers everything else."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(entities)")}
+    if "status" not in cols:
+        conn.execute("ALTER TABLE entities ADD COLUMN status TEXT NOT NULL DEFAULT 'ratified'")
+        _log("migration: entities.status added (existing rows -> 'ratified')")
+    if "origin" not in cols:
+        conn.execute("ALTER TABLE entities ADD COLUMN origin TEXT")
+        conn.execute("UPDATE entities SET origin='extraction' WHERE origin IS NULL")
+        _log("migration: entities.origin added (existing rows -> 'extraction')")
+    conn.commit()
+
+
 def match(conn, name: str, etype: str) -> str | None:
     """Read-only canonical lookup against RATIFIED entities only: exact,
     alias, case-insensitive, and name-variant folding (shorter/longer forms)

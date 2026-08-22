@@ -28,6 +28,16 @@ if _vault_override.exists():
 
     VAULT_DIR = Path(_json.loads(_vault_override.read_text())["vault_dir"])
 
+# Test override: environment variables beat everything above. This is how the
+# scripted tests point a scratch server at a temp DB and temp vault without
+# touching vault.local.json or the real database. Not for production use.
+import os as _os
+
+if _os.environ.get("CAIRN_DB_PATH"):
+    DB_PATH = Path(_os.environ["CAIRN_DB_PATH"])
+if _os.environ.get("CAIRN_VAULT_DIR"):
+    VAULT_DIR = Path(_os.environ["CAIRN_VAULT_DIR"])
+
 # ---- model / endpoint configuration ----------------------------------------
 # Single source of truth for every model name and Ollama URL in the pipeline.
 # ask.py, index.py, and selftest.py all import these — none of them may

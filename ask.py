@@ -44,6 +44,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import config
 import db as dbmod
 import frontdoor
+import interview
 import sqlite_vec
 
 logging.basicConfig(
@@ -900,27 +901,87 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- protocol handlers -------------------------------------------------
 
-    def _protocol_question(self, shape):
+    def _protocol_question(self, shape, req):
         """
-        Shared front half of both protocol handlers: parse, extract, log the
-        discards. Returns (question, request), or (None, None) after sending an
-        error response.
+        Shared front half of both protocol handlers: extract the question from
+        an already-read request, log the discards. Returns the question, or
+        None after sending an error response.
         """
-        req = self._read_json()
         question, dropped, foreign_system = extract_question(req.get("messages"))
         if not question:
             log.warning("%s: no user message in request", shape)
             self._send_json(400, {"error": {"message": "no user message in request",
                                             "type": "invalid_request_error"}})
-            return None, None
+            return None
         log_protocol_request(shape, req.get("model"), question, dropped, foreign_system)
         # Note what is deliberately NOT read from req beyond "messages", "model" and
         # "stream": no "system", "temperature", "top_p", "options", or "tools".
         # See the PROTOCOL section for why.
-        return question, req
+        return question
+
+    # ---- interview routing ---------------------------------------------------
+    # /interview and /checkin turn the chat into a structured interview
+    # (interview.py). Routing is decided from the FULL message history: a
+    # trigger command in the latest message, or an interview already in
+    # progress (last marked turn not yet confirmed or cancelled). Everything
+    # else falls through to retrieval untouched -- the single-question,
+    # drop-earlier-turns contract of the protocol face is unchanged for
+    # normal questions.
+
+    def _interview_reply(self, shape, req):
+        """Route one interview turn, streaming in the requested dialect."""
+        msgs = req.get("messages")
+        t0 = time.time()
+        log.info("%s INTERVIEW turn (history: %d message(s))", shape, len(msgs or []))
+
+        if shape == "openai":
+            req_stream = bool(req.get("stream", False))
+            cid, created = _completion_id(), _now()
+            if not req_stream:
+                text = "".join(interview.handle(msgs)).strip()
+                self._send_json(200, openai_completion(cid, created, text, ""))
+                log.info("openai interview turn complete in %.1fs", time.time() - t0)
+                return
+            self._open_stream("text/event-stream")
+            try:
+                self.wfile.write(f"data: {json.dumps(openai_chunk(cid, created, {'role': 'assistant'}))}\n\n".encode("utf-8"))
+                for piece in interview.handle(msgs):
+                    self.wfile.write(f"data: {json.dumps(openai_chunk(cid, created, {'content': piece}))}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                self.wfile.write(f"data: {json.dumps(openai_chunk(cid, created, {}, finish_reason='stop'))}\n\n".encode("utf-8"))
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                log.info("openai client disconnected mid-interview")
+                return
+            log.info("openai interview turn complete in %.1fs", time.time() - t0)
+            return
+
+        # ollama shape: newline-delimited JSON
+        req_stream = bool(req.get("stream", True))
+        if not req_stream:
+            text = "".join(interview.handle(msgs)).strip()
+            self._send_json(200, ollama_chunk(text, done=True,
+                                              total_ns=int((time.time() - t0) * 1e9)))
+            log.info("ollama interview turn complete in %.1fs", time.time() - t0)
+            return
+        self._open_stream("application/x-ndjson")
+        try:
+            for piece in interview.handle(msgs):
+                self.wfile.write((json.dumps(ollama_chunk(piece)) + "\n").encode("utf-8"))
+                self.wfile.flush()
+            self.wfile.write((json.dumps(ollama_chunk("", done=True,
+                              total_ns=int((time.time() - t0) * 1e9))) + "\n").encode("utf-8"))
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            log.info("ollama client disconnected mid-interview")
+        log.info("ollama interview turn complete in %.1fs", time.time() - t0)
 
     def handle_openai_chat(self):
-        question, req = self._protocol_question("openai")
+        req = self._read_json()
+        if interview.is_interview(req.get("messages")):
+            return self._interview_reply("openai", req)
+        question = self._protocol_question("openai", req)
         if question is None:
             return
         req_stream = bool(req.get("stream", False))   # OpenAI default: not streaming
@@ -959,7 +1020,10 @@ class Handler(BaseHTTPRequestHandler):
         log.info("openai stream complete in %.1fs", time.time() - t0)
 
     def handle_ollama_chat(self):
-        question, req = self._protocol_question("ollama")
+        req = self._read_json()
+        if interview.is_interview(req.get("messages")):
+            return self._interview_reply("ollama", req)
+        question = self._protocol_question("ollama", req)
         if question is None:
             return
         req_stream = bool(req.get("stream", True))    # Ollama default: streaming
@@ -1052,7 +1116,7 @@ def check_embed_model(conn):
         )
 
 
-def serve():
+def serve(host=HOST, port=PORT):
     conn = dbmod.connect(); load_vec(conn)
     if vec_table_exists(conn):
         n = conn.execute("SELECT COUNT(*) FROM vec_chunks").fetchone()[0]
@@ -1061,18 +1125,21 @@ def serve():
         log.warning("index is empty (no vec_chunks table yet) -- starting anyway; "
                     "the watcher will populate it as documents are ingested")
     conn.close()
-    base = f"http://{HOST}:{PORT}"
+    base = f"http://{host}:{port}"
     print(f"Cairn service on {base}  ({n} vectors indexed)")
     print(f"  Web UI             {base}/")
     print(f"  OpenAI-compatible  {base}/v1        model: {MODEL_ID}   (API key: any value)")
     print(f"  Ollama-compatible  {base}           model: {MODEL_ID}:latest")
     print("Ctrl+C to stop.")
-    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+    ThreadingHTTPServer((host, port), Handler).serve_forever()
 
 
 def main():
     ap = argparse.ArgumentParser(description="Cairn ask service")
     ap.add_argument("--ask", metavar="Q", help="one-shot question, print answer and exit")
+    ap.add_argument("--port", type=int, default=PORT,
+                    help=f"port to serve on (default {PORT}; tests use a scratch port)")
+    ap.add_argument("--host", default=HOST, help=f"interface to bind (default {HOST})")
     args = ap.parse_args()
 
     startup_conn = dbmod.connect(); dbmod.init_db(startup_conn)
@@ -1087,7 +1154,7 @@ def main():
         for c in citations:
             print(f"  [{c['n']}] {c['source_name']}  {c['heading']}  (dist {c['distance']})")
     else:
-        serve()
+        serve(args.host, args.port)
 
 
 if __name__ == "__main__":
