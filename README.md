@@ -69,7 +69,7 @@ cp ~/some-policies/*.pdf sources/
 ./.venv/bin/python ingest.py     # convert and chunk
 ./.venv/bin/python index.py      # embed into the local vector index
 
-# 4. Check everything is wired up (20 gates)
+# 4. Check everything is wired up (21 gates)
 ./.venv/bin/python selftest.py
 
 # 5. Ask
