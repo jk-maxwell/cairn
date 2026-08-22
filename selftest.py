@@ -25,11 +25,14 @@ import db as dbmod
 OK = "PASS"
 NO = "FAIL"
 
-EMBED_URL = "http://127.0.0.1:11434/api/embed"
-CHAT_URL = "http://127.0.0.1:11434/api/chat"
-VERSION_URL = "http://127.0.0.1:11434/api/version"
+# Endpoints come from config.py (override per-machine via models.local.json),
+# same as ask.py and index.py -- no URL is hardcoded here.
+EMBED_URL = config.OLLAMA_EMBED_URL
+CHAT_URL = config.OLLAMA_CHAT_URL
+VERSION_URL = config.OLLAMA_VERSION_URL
 
-# Import model names from ask.py so this tests exactly what the service uses.
+# Import model names from ask.py so this tests exactly what the service uses
+# (ask.py itself just re-exports config.EMBED_MODEL / config.GEN_MODEL).
 try:
     import ask
     EMBED_MODEL = ask.EMBED_MODEL
@@ -146,7 +149,8 @@ def t_generate():
     if "ready" not in msg.lower():
         raise RuntimeError(
             f"thinking leakage suspected: asked for one word, got {msg[:60]!r}. "
-            f"Use a non-thinking build (e.g. qwen3:4b-instruct-2507) as GEN_MODEL.")
+            f"Use a non-thinking build (e.g. qwen3:4b-instruct-2507) as GEN_MODEL "
+            f"in config.py, or override it per-machine in models.local.json.")
     return f"{GEN_MODEL} -> {msg[:40]!r}"
 
 

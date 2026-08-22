@@ -186,7 +186,18 @@ def process_file(md, conn, source: Path, force=False, dry_run=False):
     if dry_run:
         return ("would-ingest", 0)
 
-    text = md.convert(str(source)).text_content or ""
+    if source.suffix.lower() in {".md", ".txt"}:
+        # Already plain text or markdown: read it directly. MarkItDown's
+        # PlainTextConverter trusts charset detection, which mislabels UTF-8 as
+        # ASCII and crashes on the first curly quote (Gemini/Word transcript
+        # exports do this). utf-8-sig also swallows a BOM if present; utf-16
+        # covers Windows-style exports; there is nothing here to "convert."
+        try:
+            text = source.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            text = source.read_text(encoding="utf-16")
+    else:
+        text = md.convert(str(source)).text_content or ""
     content_hash = sha1(text)
 
     vault_path.parent.mkdir(parents=True, exist_ok=True)

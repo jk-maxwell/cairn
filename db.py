@@ -35,6 +35,14 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 CREATE INDEX IF NOT EXISTS idx_chunks_doc      ON chunks(doc_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_embedded ON chunks(embedded);
+
+-- Small key/value store for pipeline-level facts that must survive restarts,
+-- e.g. which embedding model built the current vector index (see get_meta /
+-- set_meta below). Not tied to any one document.
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 
@@ -56,3 +64,22 @@ def _migrate(conn):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
     if "source_url" not in cols:
         conn.execute("ALTER TABLE documents ADD COLUMN source_url TEXT")
+
+
+# ---- meta key/value helpers -------------------------------------------------
+# Used by index.py to stamp which embedding model + dimension built the vector
+# table, and by ask.py to refuse to serve if the configured model no longer
+# matches the one the index was actually built with.
+
+def get_meta(conn, key):
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def set_meta(conn, key, value):
+    conn.execute(
+        "INSERT INTO meta(key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, str(value)),
+    )
+    conn.commit()

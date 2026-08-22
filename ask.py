@@ -26,8 +26,9 @@ Usage:
     py ask.py                       start the service at http://127.0.0.1:8765
     py ask.py --ask "your question" one-shot from the command line, no server
 
-Requires Ollama running with both models pulled:
-    qwen3:4b-instruct-2507-q4_K_M  (generation)   nomic-embed-text  (retrieval)
+Requires Ollama running with both models pulled (see config.py / models.local.json
+for the machine-local model names and endpoint):
+    config.GEN_MODEL  (generation)   config.EMBED_MODEL  (retrieval)
 """
 
 import argparse
@@ -53,10 +54,10 @@ logging.basicConfig(
 log = logging.getLogger("cairn")
 
 
-OLLAMA_EMBED = "http://127.0.0.1:11434/api/embed"
-OLLAMA_CHAT = "http://127.0.0.1:11434/api/chat"
-EMBED_MODEL = "nomic-embed-text"
-GEN_MODEL = "qwen3:4b-instruct-2507-q4_K_M"
+OLLAMA_EMBED = config.OLLAMA_EMBED_URL
+OLLAMA_CHAT = config.OLLAMA_CHAT_URL
+EMBED_MODEL = config.EMBED_MODEL
+GEN_MODEL = config.GEN_MODEL
 KEEP_ALIVE = "30m"           # keep models loaded between calls; cold loads are the hidden latency
 TOP_K = 5
 HOST, PORT = "127.0.0.1", 8765
@@ -245,7 +246,24 @@ def load_vec(conn):
     conn.enable_load_extension(False)
 
 
+def vec_table_exists(conn) -> bool:
+    """
+    True once index.py has created vec_chunks. On a virgin DB (watcher/index
+    hasn't run yet, or --reset just dropped it) the table is absent, and the
+    service should still start and answer with a grounded refusal rather than
+    crash with sqlite3.OperationalError.
+    """
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='vec_chunks'"
+    ).fetchone()
+    return row is not None
+
+
 def retrieve(conn, question, k=TOP_K):
+    if not vec_table_exists(conn):
+        log.warning("vec_chunks table does not exist yet -- index is empty, "
+                    "the watcher will populate it. Retrieving no evidence.")
+        return []
     qvec = embed_query(question)
     t0 = time.time()
     rows = conn.execute(
@@ -1008,9 +1026,40 @@ class Handler(BaseHTTPRequestHandler):
         pass  # suppress the default per-request access line; we log meaningfully above
 
 
+def check_embed_model(conn):
+    """
+    Loud-failure guard: refuse to serve if the configured embedding model does
+    not match the one the index was actually built with (index.py owns writing
+    that stamp via check_and_stamp_embed_model). A silent mismatch here would
+    mean the query vector speaks a different geometry than the indexed vectors
+    -- retrieval quietly degrades or returns garbage, with no error anywhere.
+    """
+    stored_model = dbmod.get_meta(conn, "embed_model")
+    if stored_model is None:
+        log.warning("no embed_model stamp in meta table yet -- index.py has not run. "
+                    "Proceeding; run index.py to build/stamp the index.")
+        return
+    stored_dim = dbmod.get_meta(conn, "embedding_dim")
+    if stored_model != config.EMBED_MODEL or (stored_dim is not None and str(stored_dim) != str(config.EMBEDDING_DIM)):
+        raise SystemExit(
+            "EMBEDDING MODEL MISMATCH -- refusing to serve.\n"
+            f"  index was built with  : {stored_model} (dim {stored_dim})\n"
+            f"  currently configured  : {config.EMBED_MODEL} (dim {config.EMBEDDING_DIM})\n"
+            "Serving now would embed questions with a different model than the one\n"
+            "that built the index, silently corrupting retrieval. Fix by either:\n"
+            "  1. Deleting cairn.db and letting the watcher rebuild the index, or\n"
+            "  2. Reverting EMBED_MODEL back to the model above (config.py or models.local.json)."
+        )
+
+
 def serve():
     conn = dbmod.connect(); load_vec(conn)
-    n = conn.execute("SELECT COUNT(*) FROM vec_chunks").fetchone()[0]
+    if vec_table_exists(conn):
+        n = conn.execute("SELECT COUNT(*) FROM vec_chunks").fetchone()[0]
+    else:
+        n = 0
+        log.warning("index is empty (no vec_chunks table yet) -- starting anyway; "
+                    "the watcher will populate it as documents are ingested")
     conn.close()
     base = f"http://{HOST}:{PORT}"
     print(f"Cairn service on {base}  ({n} vectors indexed)")
@@ -1025,6 +1074,10 @@ def main():
     ap = argparse.ArgumentParser(description="Cairn ask service")
     ap.add_argument("--ask", metavar="Q", help="one-shot question, print answer and exit")
     args = ap.parse_args()
+
+    startup_conn = dbmod.connect(); dbmod.init_db(startup_conn)
+    check_embed_model(startup_conn)
+    startup_conn.close()
 
     if args.ask:
         conn = dbmod.connect(); load_vec(conn)

@@ -2,22 +2,26 @@
 Cairn index build: embed pending chunks into a sqlite-vec vector table.
 
 Reads chunks where embedded=0, sends their text (heading prepended) to the local
-Ollama embedding model (EMBED_MODEL below), stores EMBEDDING_DIM-length vectors in
-vec_chunks, and flips embedded=1. Deterministic pipeline feeds this; the only model
-call is the embedding itself.
+Ollama embedding model (config.EMBED_MODEL), stores config.EMBEDDING_DIM-length
+vectors in vec_chunks, and flips embedded=1. Deterministic pipeline feeds this;
+the only model call is the embedding itself.
+
+Model and endpoint are configured centrally in config.py (override via
+models.local.json for a different machine) -- nothing here is hardcoded.
 
 Usage:
     py index.py                 embed all pending chunks
     py index.py --dry-run       report pending count + time estimate, embed nothing
     py index.py --reset         drop the vector table and re-embed everything
 
-Requires Ollama running locally with the embedding model pulled:
+Requires Ollama running locally with the embedding model pulled, e.g.:
     ollama pull nomic-embed-text
 """
 
 import argparse
 import json
 import struct
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -27,8 +31,6 @@ import db as dbmod
 import sqlite_vec
 
 
-OLLAMA_URL = "http://127.0.0.1:11434/api/embed"
-EMBED_MODEL = "nomic-embed-text"
 BATCH_SIZE = 16          # chunks per Ollama call
 EST_SECONDS_PER_CHUNK = 0.5   # rough prior; replaced by a live measurement after batch 1
 
@@ -37,9 +39,9 @@ EST_SECONDS_PER_CHUNK = 0.5   # rough prior; replaced by a live measurement afte
 
 def embed_batch(texts: list[str]) -> list[list[float]]:
     """Call Ollama's /api/embed with a list of inputs, return list of vectors."""
-    payload = json.dumps({"model": EMBED_MODEL, "input": texts, "keep_alive": "30m"}).encode("utf-8")
+    payload = json.dumps({"model": config.EMBED_MODEL, "input": texts, "keep_alive": "30m"}).encode("utf-8")
     req = urllib.request.Request(
-        OLLAMA_URL, data=payload, headers={"Content-Type": "application/json"}
+        config.OLLAMA_EMBED_URL, data=payload, headers={"Content-Type": "application/json"}
     )
     with urllib.request.urlopen(req, timeout=120) as resp:
         data = json.loads(resp.read().decode("utf-8"))
@@ -88,6 +90,49 @@ def ensure_vec_table(conn, reset=False):
     conn.commit()
 
 
+# ---- embedding model / meta guard ------------------------------------------
+
+def check_and_stamp_embed_model(conn, reset=False):
+    """
+    Loud-failure guard against silently corrupting retrieval with a mismatched
+    embedding model. The vector table's rows are only meaningful when they were
+    all produced by the same model at the same dimension.
+
+    - First run ever (no meta row): stamp the currently configured model. This
+      also covers upgrading a pre-meta-table database in place -- its existing
+      vectors were made by whatever config.EMBED_MODEL is right now, so that is
+      the correct value to backfill.
+    - --reset: the user explicitly asked to drop and rebuild, so overwrite the
+      stamp unconditionally with the current config.
+    - Otherwise, if the stamp disagrees with the current config, abort rather
+      than mixing embeddings from two different models in one vector table.
+    """
+    if reset:
+        dbmod.set_meta(conn, "embed_model", config.EMBED_MODEL)
+        dbmod.set_meta(conn, "embedding_dim", config.EMBEDDING_DIM)
+        print(f"--reset: stamped index meta -> embed_model={config.EMBED_MODEL} dim={config.EMBEDDING_DIM}")
+        return
+
+    stored_model = dbmod.get_meta(conn, "embed_model")
+    if stored_model is None:
+        dbmod.set_meta(conn, "embed_model", config.EMBED_MODEL)
+        dbmod.set_meta(conn, "embedding_dim", config.EMBEDDING_DIM)
+        print(f"First run: stamped index meta -> embed_model={config.EMBED_MODEL} dim={config.EMBEDDING_DIM}")
+        return
+
+    stored_dim = dbmod.get_meta(conn, "embedding_dim")
+    if stored_model != config.EMBED_MODEL or (stored_dim is not None and str(stored_dim) != str(config.EMBEDDING_DIM)):
+        sys.exit(
+            "EMBEDDING MODEL MISMATCH -- refusing to embed.\n"
+            f"  index was built with  : {stored_model} (dim {stored_dim})\n"
+            f"  currently configured  : {config.EMBED_MODEL} (dim {config.EMBEDDING_DIM})\n"
+            "This would silently corrupt retrieval by mixing vectors from two\n"
+            "different embedding models in the same table. Fix by either:\n"
+            "  1. Deleting cairn.db and letting the watcher rebuild the index, or\n"
+            "  2. Reverting EMBED_MODEL back to the model above (config.py or models.local.json)."
+        )
+
+
 # ---- main ------------------------------------------------------------------
 
 def fetch_pending(conn):
@@ -114,6 +159,7 @@ def main():
     dbmod.init_db(conn)
     load_vec(conn)
     ensure_vec_table(conn, reset=args.reset)
+    check_and_stamp_embed_model(conn, reset=args.reset)
 
     pending = fetch_pending(conn)
     n = len(pending)
@@ -126,7 +172,7 @@ def main():
     est = n * EST_SECONDS_PER_CHUNK
     print(f"Pending chunks : {n}")
     print(f"Total text     : {total_chars:,} chars")
-    print(f"Model          : {EMBED_MODEL}  (dim {config.EMBEDDING_DIM})")
+    print(f"Model          : {config.EMBED_MODEL}  (dim {config.EMBEDDING_DIM})")
     print(f"Rough estimate : ~{human_time(est)} (refined after the first batch)")
 
     if args.dry_run:
@@ -145,7 +191,7 @@ def main():
         try:
             vecs = embed_batch(texts)
         except urllib.error.URLError as e:
-            print(f"  ERROR reaching Ollama at {OLLAMA_URL}: {e}")
+            print(f"  ERROR reaching Ollama at {config.OLLAMA_EMBED_URL}: {e}")
             print("  Is the Ollama server running? Try: ollama list")
             break
 
