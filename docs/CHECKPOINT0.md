@@ -1,6 +1,8 @@
 # Checkpoint 0 Execution Checklist: the probe
 
-**Draft 1. Numbered for markup.**
+**Draft 2. Numbered for markup.**
+
+*Changed from draft 1: the repository's `.gitignore` was repaired before execution (inline `#` comments had silently disabled the `sources/`, `vault/`, `*.db`, `benchmarks.csv`, and `gates.txt` patterns — git treats `#` as a comment only at the start of a line) and `*.local.json` was widened to `*.local.*` so P0-9's note is actually covered. P0-6's append was fixed to put its comment on its own line for the same reason.*
 
 *Executes Checkpoint 0 of docs/TECHNICAL_ROADMAP.md: ask the real vault from inside Obsidian, today, through borrowed chrome. Work is performed by subagents; the orchestrating model verifies every task independently before the next one starts. Each task below is written to be handed to a subagent whole: everything a task needs is inside it or inside the facts sheet, and no subagent reads project documents or fetches anything.*
 
@@ -24,7 +26,7 @@ Repository: the Cairn repository root (the orchestrator supplies the absolute pa
 - **Exact refusal string** (assert equality, not containment): `Sorry, I was unable to find information pertaining to your question.`
 - **Receipt log**: the engine logs every question with a timestamp on both faces (lines beginning `ASK`), plus lane, retrieval, and citation-count lines. Console output redirected to a file is the receipt log.
 - **Never**: touch port 4001 (unrelated local service); write into the user's Obsidian vault; commit or stage anything under `sources/`, `vault/`, any `*.db`, or any probe log (`.gitignore` enforces this; verify, do not assume); send any data off the machine.
-- **The real vault path is secret to the repository**: it lives only in `probe-vault.local.json` at the repository root (`*.local.json` is gitignored) and must never appear in any committed file, including this one.
+- **The real vault path is secret to the repository**: it lives only in `probe-vault.local.json` at the repository root (`*.local.*` is gitignored) and must never appear in any committed file, including this one.
 
 ## 3. P0-1: environment preflight
 
@@ -121,12 +123,12 @@ find sources/probe-vault -name '*.md' | wc -l
 
 **Objective.** Start the engine so it survives the terminal and writes the receipt log the probe's evidence depends on.
 
-**Context.** Add the probe log pattern to `.gitignore` first, under the user-content block, honoring that file's comment: it is an allow-nothing list for data, and a log of real questions is data. This is the only tracked-file edit in the whole checkpoint.
+**Context.** Add the probe log pattern to `.gitignore` first, under the user-content block, honoring that file's comment: it is an allow-nothing list for data, and a log of real questions is data. The comment goes on its own line above the pattern — git treats `#` as a comment only at the start of a line, so an inline comment would become part of the pattern and silently disable it. This is the only tracked-file edit in the whole checkpoint.
 
 **Commands.**
 
 ```bash
-grep -q 'probe-\*.log' .gitignore || printf 'probe-*.log         # probe receipt log: real questions, user content\n' >> .gitignore
+grep -q 'probe-\*.log' .gitignore || printf '# probe receipt log: real questions, user content\nprobe-*.log\n' >> .gitignore
 nohup ./.venv/bin/python ask.py >> probe-receipts.log 2>&1 &
 sleep 3
 lsof -nP -iTCP:8765 -sTCP:LISTEN
