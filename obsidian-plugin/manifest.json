@@ -1,0 +1,10 @@
+{
+  "id": "cairn",
+  "name": "Cairn",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Ask your notes. Answers with receipts, locally.",
+  "author": "",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
