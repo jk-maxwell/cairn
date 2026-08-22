@@ -39,6 +39,7 @@ from pathlib import Path
 
 import config
 import db as dbmod
+import enrich
 
 ROOT = config.ROOT
 SOURCES_DIR = config.SOURCES_DIR
@@ -187,6 +188,16 @@ def reconcile_deletions() -> int:
         except Exception:
             conn.rollback()
             raise
+
+        # Pruned meetings must drop out of the derived index notes too. Entity
+        # pages (People/Projects) are left in place -- they may still reference
+        # other surviving meetings -- but regenerating recomputes their meeting
+        # lists correctly since meeting_entities cascade-deleted above.
+        try:
+            enrich.regenerate_index_notes(conn)
+        except Exception as e:
+            log(f"reconcile WARN could not regenerate index notes: {type(e).__name__}: {e}")
+
         return len(gone)
     finally:
         conn.close()

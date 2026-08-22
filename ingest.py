@@ -24,6 +24,7 @@ from pathlib import Path
 
 import config
 import db as dbmod
+import enrich
 from markitdown import MarkItDown
 
 
@@ -50,6 +51,68 @@ def front_matter(source: Path, doc_id: str) -> str:
         f"doc_id: {doc_id}\n"
         f"source_name: {source.name}\n"
         f'source_path: "{src}"\n'
+        f"source_modified: {iso(source.stat().st_mtime)}\n"
+        f"converted: {iso()}\n"
+        f"status: {config.DEFAULT_STATUS}\n"
+        "---\n\n"
+    )
+
+
+# ---- meeting-note handling (sources/transcripts/) ---------------------------
+# Meeting transcripts get a clean date-first title, land at Meetings/<title>.md
+# at the vault root instead of mirroring the source path, and are the only
+# sources semantically enriched (enrich.py) after conversion. See docs/THESIS.md
+# sections 2, 3, 5, 6 for why: personal content is never rewritten, machine
+# contributions live only in front matter and the one marked block appended
+# at the end.
+
+MEETINGS_SUBDIR = "transcripts"
+
+# Gemini meeting-note export filename pattern:
+#   <Name> - YYYY_MM_DD HH_MM TZ - Notes by Gemini[.md]
+GEMINI_EXPORT_RE = re.compile(
+    r'^(?P<name>.+?) - (?P<y>\d{4})_(?P<m>\d{2})_(?P<d>\d{2}) \d{2}_\d{2} \S+ - Notes by Gemini$'
+)
+
+
+def is_meeting_source(source: Path) -> bool:
+    rel = source.relative_to(config.SOURCES_DIR)
+    return rel.parts[0] == MEETINGS_SUBDIR if rel.parts else False
+
+
+def derive_meeting_title(source: Path) -> str:
+    """Clean, date-first title. Gemini export names parse directly; anything
+    else falls back to the file's mtime date + a cleaned-up filename."""
+    m = GEMINI_EXPORT_RE.match(source.stem)
+    if m:
+        return f"{m.group('y')}-{m.group('m')}-{m.group('d')} {m.group('name').strip()}"
+    dt_date = iso(source.stat().st_mtime)[:10]
+    cleaned = re.sub(r'[_]+', ' ', source.stem).strip()
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    return f"{dt_date} {cleaned}"
+
+
+_MEETING_DATE_RE = re.compile(r'^(\d{4}-\d{2}-\d{2}) ')
+
+
+def meeting_front_matter(source: Path, doc_id: str, title: str, enrich_result: dict | None) -> str:
+    m = _MEETING_DATE_RE.match(title)
+    date = m.group(1) if m else iso(source.stat().st_mtime)[:10]
+    attendees = enrich_result["attendees"] if enrich_result else []
+    projects = enrich_result["projects"] if enrich_result else []
+
+    def yaml_list(items):
+        return "[" + ", ".join(f'"{i}"' for i in items) + "]" if items else "[]"
+
+    return (
+        "---\n"
+        f"doc_id: {doc_id}\n"
+        f'title: "{title}"\n'
+        f"date: {date}\n"
+        "type: meeting\n"
+        f"attendees: {yaml_list(attendees)}\n"
+        f"project: {yaml_list(projects)}\n"
+        f"source: {source.name}\n"
         f"source_modified: {iso(source.stat().st_mtime)}\n"
         f"converted: {iso()}\n"
         f"status: {config.DEFAULT_STATUS}\n"
@@ -174,7 +237,18 @@ def process_file(md, conn, source: Path, force=False, dry_run=False):
     doc_id = doc_id_for(source)
     src_mtime = iso(source.stat().st_mtime)
     rel = source.relative_to(config.SOURCES_DIR)
-    vault_path = (config.VAULT_DIR / rel).with_suffix(".md")
+    is_meeting = is_meeting_source(source)
+
+    if is_meeting:
+        # Clean title, deterministic from the filename alone (no model call) --
+        # so the up-to-date/skip check below stays cheap and side-effect free.
+        # Written to Meetings/<title>.md at the vault root instead of mirroring
+        # the source path; documents.vault_path records this real path so
+        # watch.py's prune keeps working.
+        title = derive_meeting_title(source)
+        vault_path = config.VAULT_DIR / "Meetings" / f"{enrich.sanitize_filename(title)}.md"
+    else:
+        vault_path = (config.VAULT_DIR / rel).with_suffix(".md")
 
     row = conn.execute(
         "SELECT source_modified FROM documents WHERE doc_id=?", (doc_id,)
@@ -199,15 +273,12 @@ def process_file(md, conn, source: Path, force=False, dry_run=False):
     else:
         text = md.convert(str(source)).text_content or ""
     content_hash = sha1(text)
-
-    vault_path.parent.mkdir(parents=True, exist_ok=True)
-    vault_path.write_text(front_matter(source, doc_id) + text, encoding="utf-8")
-
-    chunks = chunk_markdown(text)
     source_url = derive_source_url(source)   # POC backfill; scraper will supply this directly later
 
-    # Upsert the document. Note: status is intentionally NOT overwritten on update,
-    # so a human reclassification (draft -> final/restricted) survives re-ingestion.
+    # Upsert the document BEFORE enrichment: meeting_entities has a foreign key
+    # on doc_id, so the documents row must exist first. Note: status is
+    # intentionally NOT overwritten on update, so a human reclassification
+    # (draft -> final/restricted) survives re-ingestion.
     conn.execute(
         """
         INSERT INTO documents
@@ -225,6 +296,29 @@ def process_file(md, conn, source: Path, force=False, dry_run=False):
         (doc_id, str(source), source.name, source_url, src_mtime, content_hash,
          str(vault_path), iso(), config.DEFAULT_STATUS),
     )
+    conn.commit()
+
+    vault_path.parent.mkdir(parents=True, exist_ok=True)
+    if is_meeting:
+        # Semantic enrichment (Ollama, JSON-strict, retry-once, degrade-gracefully
+        # on failure -- see enrich.py). `text` here is the verbatim converted
+        # transcript; enrichment never touches it. Machine contributions land
+        # only in front matter and the one marked block appended below.
+        enrich_result = enrich.enrich_meeting(conn, doc_id, source, title, text)
+        block = enrich.build_cairn_block(enrich_result) if enrich_result else ""
+        # The written body gets one deterministic conversion cleanup (Gemini's
+        # escaped-bracket action attributions become real wikilinks -- see
+        # linkify_gemini_artifacts). Chunking below stays on the raw `text`,
+        # so embeddings never carry link syntax.
+        body = enrich.linkify_gemini_artifacts(conn, text)
+        vault_path.write_text(
+            meeting_front_matter(source, doc_id, title, enrich_result) + body + block,
+            encoding="utf-8",
+        )
+    else:
+        vault_path.write_text(front_matter(source, doc_id) + text, encoding="utf-8")
+
+    chunks = chunk_markdown(text)
 
     # Replace chunks wholesale; new chunks default embedded=0 for the index step.
     conn.execute("DELETE FROM chunks WHERE doc_id=?", (doc_id,))
@@ -291,6 +385,14 @@ def main():
         pending = conn.execute("SELECT COUNT(*) FROM chunks WHERE embedded=0").fetchone()[0]
         if pending:
             print(f"{pending} chunk(s) awaiting embedding. Next step: the index build.")
+
+        # Regenerate every derived index note (Cairn/Home.md, Meetings.md, People/*,
+        # Projects/*) from current DB + vault-on-disk state. Cheap, idempotent, and
+        # unconditional so it stays correct even on a run that ingested nothing new.
+        try:
+            enrich.regenerate_index_notes(conn)
+        except Exception as e:
+            print(f"WARN: could not regenerate Cairn/ index notes: {type(e).__name__}: {e}")
 
     if failures:
         log = config.VAULT_DIR / "_ingest_failures.log"

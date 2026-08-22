@@ -43,6 +43,34 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Canonical entities (people, projects) discovered by enrich.py while
+-- enriching meeting notes. A new extracted name that is a case-insensitive
+-- exact match, or a prefix/substring variant, of an existing entity folds
+-- into that entity's aliases instead of creating a duplicate row -- see
+-- enrich.canonicalize_entity(). note_path is filled in when the derived
+-- Cairn/People or Cairn/Projects page for this entity is (re)generated.
+CREATE TABLE IF NOT EXISTS entities (
+    entity_id  TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,       -- canonical name, as currently best known
+    type       TEXT NOT NULL,       -- person | project
+    aliases    TEXT DEFAULT '[]',   -- JSON array of alternate names folded into this entity
+    note_path  TEXT                 -- vault path to the generated Cairn/People|Projects page
+);
+
+CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+
+-- Many-to-many: which meeting documents mention which entities. Rewritten
+-- wholesale for a doc_id each time that document is (re)enriched, and
+-- cascade-deleted when the document is pruned, so entity pages regenerate
+-- correctly without any special-case prune handling.
+CREATE TABLE IF NOT EXISTS meeting_entities (
+    doc_id     TEXT NOT NULL,
+    entity_id  TEXT NOT NULL,
+    PRIMARY KEY (doc_id, entity_id),
+    FOREIGN KEY (doc_id) REFERENCES documents(doc_id) ON DELETE CASCADE,
+    FOREIGN KEY (entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
+);
 """
 
 
