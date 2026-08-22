@@ -196,8 +196,13 @@ def main():
             break
 
         for (chunk_id, _, _), vec in zip(batch, vecs):
+            # sqlite-vec's vec0 virtual table does not honor INSERT OR REPLACE
+            # (the conflict clause never reaches its update hook, so a re-embed
+            # of an existing chunk_id -- e.g. after ingest --force -- raises
+            # UNIQUE constraint failed). Delete-then-insert is the reliable form.
+            conn.execute("DELETE FROM vec_chunks WHERE chunk_id=?", (chunk_id,))
             conn.execute(
-                "INSERT OR REPLACE INTO vec_chunks(chunk_id, embedding) VALUES (?,?)",
+                "INSERT INTO vec_chunks(chunk_id, embedding) VALUES (?,?)",
                 (chunk_id, serialize(vec)),
             )
             conn.execute("UPDATE chunks SET embedded=1 WHERE chunk_id=?", (chunk_id,))
