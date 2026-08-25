@@ -26,9 +26,11 @@ Usage:
     py ask.py                       start the service at http://127.0.0.1:8765
     py ask.py --ask "your question" one-shot from the command line, no server
 
-Requires Ollama running with both models pulled (see config.py / models.local.json
-for the machine-local model names and endpoint):
-    config.GEN_MODEL  (generation)   config.EMBED_MODEL  (retrieval)
+Requires the configured generation and embedding endpoints reachable (see
+config.py / models.local.json for the machine-local model names, dialects, and
+endpoints -- they need not be the same server):
+    config.GEN_MODEL   (generation, config.GEN_DIALECT: "ollama" or "openai")
+    config.EMBED_MODEL (retrieval, always Ollama dialect)
 """
 
 import argparse
@@ -45,6 +47,7 @@ import config
 import db as dbmod
 import frontdoor
 import interview
+import llm
 import sqlite_vec
 
 logging.basicConfig(
@@ -55,11 +58,13 @@ logging.basicConfig(
 log = logging.getLogger("cairn")
 
 
-OLLAMA_EMBED = config.OLLAMA_EMBED_URL
-OLLAMA_CHAT = config.OLLAMA_CHAT_URL
+EMBED_URL = config.EMBED_URL
 EMBED_MODEL = config.EMBED_MODEL
 GEN_MODEL = config.GEN_MODEL
-KEEP_ALIVE = "30m"           # keep models loaded between calls; cold loads are the hidden latency
+KEEP_ALIVE = "30m"           # embedding calls only: keep the Ollama embed model loaded
+                              # between calls; cold loads are the hidden latency. Generation
+                              # calls go through llm.py, which owns its own dialect-specific
+                              # keep-alive handling.
 TOP_K = 5
 HOST, PORT = "127.0.0.1", 8765
 BUILD = "cairn-frontdoor-1"  # bump when the page/JS changes; visible in the UI footer
@@ -233,7 +238,7 @@ def serialize(vec):
 def embed_query(text: str):
     t0 = time.time()
     payload = json.dumps({"model": EMBED_MODEL, "input": [text], "keep_alive": KEEP_ALIVE}).encode("utf-8")
-    req = urllib.request.Request(OLLAMA_EMBED, data=payload,
+    req = urllib.request.Request(EMBED_URL, data=payload,
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=120) as resp:
         vec = json.loads(resp.read().decode("utf-8"))["embeddings"][0]
@@ -313,46 +318,28 @@ def synthesize_stream(question, rows):
         "Answer using only the passages above, citing passage numbers."
     )
     full_prompt = SYSTEM_PROMPT + user_msg
-    num_ctx = size_context(full_prompt)
-    log.info("context: ~%d prompt tokens -> num_ctx=%d (note: IPEX backend may override via IPEX_LLM_NUM_CTX)",
-             estimate_tokens(full_prompt), num_ctx)
+    log.info("context: ~%d prompt tokens (estimate; num_ctx sizing is Ollama-only and "
+             "handled server-side under the OpenAI dialect)", estimate_tokens(full_prompt))
 
-    payload = json.dumps({
-        "model": GEN_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_msg},
-        ],
-        "stream": True,                 # stream tokens as they generate
-        "think": False,
-        "keep_alive": KEEP_ALIVE,
-        "options": {
-            "temperature": TEMPERATURE,
-            "num_ctx": num_ctx,
-            "num_predict": NUM_PREDICT,
-        },
-    }).encode("utf-8")
-    req = urllib.request.Request(OLLAMA_CHAT, data=payload,
-                                 headers={"Content-Type": "application/json"})
-    log.info("calling %s (evidence %d chars), streaming ...", GEN_MODEL, len(evidence))
+    log.info("calling %s via %s (evidence %d chars), streaming ...",
+             GEN_MODEL, config.GEN_DIALECT, len(evidence))
     t0 = time.time()
     n_tokens = 0
     try:
-        with urllib.request.urlopen(req, timeout=300) as resp:
-            for line in resp:                       # Ollama streams newline-delimited JSON
-                line = line.strip()
-                if not line:
-                    continue
-                obj = json.loads(line.decode("utf-8"))
-                piece = obj.get("message", {}).get("content", "")
-                if piece:
-                    n_tokens += 1
-                    yield piece
-                if obj.get("done"):
-                    break
-    except urllib.error.URLError as e:
-        log.error("Ollama chat call failed: %s", e)
-        yield f"[service error: could not reach the model. Is Ollama running? {e}]"
+        for piece in llm.chat(
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            stream=True,
+            temperature=TEMPERATURE,
+            max_tokens=NUM_PREDICT,
+        ):
+            n_tokens += 1
+            yield piece
+    except llm.LLMError as e:
+        log.error("generation chat call failed: %s", e)
+        yield f"[service error: could not reach the generation model. {e}]"
         return
     dt = time.time() - t0
     rate = n_tokens / dt if dt > 0 else 0

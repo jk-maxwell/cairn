@@ -30,27 +30,26 @@ Thesis constraints this module exists to honor (see docs/THESIS.md sections
     vault root replace them, with registry.regenerate_rollups() rewriting
     only the marked block on each.
 
-Uses Ollama chat (config.OLLAMA_CHAT_URL / config.GEN_MODEL) with strict
-JSON-output prompting, one retry on malformed output, and graceful
-degradation: if the model still won't cooperate, enrichment is skipped with
-a logged warning and ingest continues (the note is still written, just
-without attendees/projects/block/draft).
+Uses the shared generation client (llm.chat, config.GEN_MODEL / config.GEN_DIALECT
+-- Ollama or OpenAI dialect, whichever this machine's models.local.json points
+at) with strict JSON-output prompting, one retry on malformed output, and
+graceful degradation: if the model still won't cooperate, enrichment is
+skipped with a logged warning and ingest continues (the note is still
+written, just without attendees/projects/block/draft).
 """
 
 import json
 import re
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 import config
+import llm
 import registry
 
 # ---- model call -------------------------------------------------------------
 
 TEMPERATURE = 0
 NUM_PREDICT = 1200
-NUM_CTX = 16384  # matches the llama-server -c 16384 this Ollama model is served with
 
 # Generous headroom: the longest of the three real transcripts is ~21K chars
 # (~5-6K tokens). Cap well above that so a much longer transcript degrades
@@ -79,27 +78,10 @@ SYSTEM_PROMPT = (
 
 
 def _chat(messages: list[dict]) -> str | None:
-    payload = json.dumps({
-        "model": config.GEN_MODEL,
-        "messages": messages,
-        "stream": False,
-        "think": False,
-        "keep_alive": "10m",
-        "options": {
-            "temperature": TEMPERATURE,
-            "num_ctx": NUM_CTX,
-            "num_predict": NUM_PREDICT,
-        },
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        config.OLLAMA_CHAT_URL, data=payload, headers={"Content-Type": "application/json"}
-    )
     try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return data.get("message", {}).get("content", "")
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        print(f"  WARN enrich: Ollama chat call failed: {type(e).__name__}: {e}")
+        return llm.chat(messages, stream=False, temperature=TEMPERATURE, max_tokens=NUM_PREDICT)
+    except llm.LLMError as e:
+        print(f"  WARN enrich: generation chat call failed: {e}")
         return None
 
 

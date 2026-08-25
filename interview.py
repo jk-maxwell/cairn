@@ -20,9 +20,9 @@ How state works -- THE SERVER STAYS STATELESS:
   back without re-parsing.
 
 Division of labour: the question SCRIPT is deterministic code; the model
-(config.GEN_MODEL, temperature 0, the same _chat pattern as enrich.py) is used
-ONLY to parse the user's free-text answers into structured JSON, with one
-retry on malformed output and graceful degradation.
+(config.GEN_MODEL via llm.chat, temperature 0, the same pattern as enrich.py)
+is used ONLY to parse the user's free-text answers into structured JSON, with
+one retry on malformed output and graceful degradation.
 
 Writes on confirmation:
   - Profile.md at the vault root (front matter `cairn-type: profile`), the
@@ -34,14 +34,13 @@ Writes on confirmation:
 import json
 import logging
 import re
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 import config
 import db as dbmod
 
+import llm
 import registry
 from registry import ensure_entity_columns
 
@@ -50,7 +49,6 @@ log = logging.getLogger("cairn.interview")
 # ---- model call (same pattern as enrich.py) ---------------------------------
 
 TEMPERATURE = 0
-NUM_CTX = 8192
 NUM_PREDICT = 1500
 
 STALE_DAYS = 14          # a ratified project unmentioned this long is "gone quiet"
@@ -58,27 +56,10 @@ RECENT_MEETINGS = 3      # how many recent meeting titles the check-in mentions
 
 
 def _chat(messages: list[dict]) -> str | None:
-    payload = json.dumps({
-        "model": config.GEN_MODEL,
-        "messages": messages,
-        "stream": False,
-        "think": False,
-        "keep_alive": "10m",
-        "options": {
-            "temperature": TEMPERATURE,
-            "num_ctx": NUM_CTX,
-            "num_predict": NUM_PREDICT,
-        },
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        config.OLLAMA_CHAT_URL, data=payload, headers={"Content-Type": "application/json"}
-    )
     try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return data.get("message", {}).get("content", "")
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        log.warning("interview: Ollama chat call failed: %s: %s", type(e).__name__, e)
+        return llm.chat(messages, stream=False, temperature=TEMPERATURE, max_tokens=NUM_PREDICT)
+    except llm.LLMError as e:
+        log.warning("interview: generation chat call failed: %s", e)
         return None
 
 

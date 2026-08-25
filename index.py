@@ -44,7 +44,7 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
     """Call Ollama's /api/embed with a list of inputs, return list of vectors."""
     payload = json.dumps({"model": config.EMBED_MODEL, "input": texts, "keep_alive": "30m"}).encode("utf-8")
     req = urllib.request.Request(
-        config.OLLAMA_EMBED_URL, data=payload, headers={"Content-Type": "application/json"}
+        config.EMBED_URL, data=payload, headers={"Content-Type": "application/json"}
     )
     with urllib.request.urlopen(req, timeout=120) as resp:
         data = json.loads(resp.read().decode("utf-8"))
@@ -194,7 +194,7 @@ def main():
         try:
             vecs = embed_batch(texts)
         except urllib.error.URLError as e:
-            print(f"  ERROR reaching Ollama at {config.OLLAMA_EMBED_URL}: {e}")
+            print(f"  ERROR reaching Ollama at {config.EMBED_URL}: {e}")
             print("  Is the Ollama server running? Try: ollama list")
             break
 

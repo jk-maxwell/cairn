@@ -22,15 +22,19 @@ from pathlib import Path
 
 import config
 import db as dbmod
+import llm
 
 OK = "PASS"
 NO = "FAIL"
 
 # Endpoints come from config.py (override per-machine via models.local.json),
-# same as ask.py and index.py -- no URL is hardcoded here.
-EMBED_URL = config.OLLAMA_EMBED_URL
-CHAT_URL = config.OLLAMA_CHAT_URL
-VERSION_URL = config.OLLAMA_VERSION_URL
+# same as ask.py and index.py -- no URL is hardcoded here. Embeddings are
+# always Ollama dialect; generation follows config.GEN_DIALECT and may be a
+# completely different server (e.g. a remote OpenAI-dialect inference edge).
+EMBED_URL = config.EMBED_URL
+EMBED_VERSION_URL = f"{config.EMBED_BASE}/api/version"
+GEN_DIALECT = config.GEN_DIALECT
+GEN_HEALTH_URL = config.GEN_HEALTH_URL
 
 # Import model names from ask.py so this tests exactly what the service uses
 # (ask.py itself just re-exports config.EMBED_MODEL / config.GEN_MODEL).
@@ -64,11 +68,28 @@ def post_json(url, payload, timeout=60):
         return json.loads(resp.read().decode("utf-8"))
 
 
-# --- 1. Ollama server reachable ---------------------------------------------
-def t_server():
-    with urllib.request.urlopen(VERSION_URL, timeout=10) as r:
+# --- 1a. Embedding server reachable (always Ollama dialect) ------------------
+def t_embed_server():
+    with urllib.request.urlopen(EMBED_VERSION_URL, timeout=10) as r:
         v = json.loads(r.read().decode())["version"]
-    return f"Ollama {v}"
+    return f"Ollama {v}  ({config.EMBED_BASE})"
+
+
+# --- 1b. Generation endpoint reachable, per configured dialect ----------------
+def t_gen_health():
+    if GEN_DIALECT == "openai":
+        # OpenAI dialect: GET {base}/v1/models must list the configured model.
+        with urllib.request.urlopen(GEN_HEALTH_URL, timeout=10) as r:
+            data = json.loads(r.read().decode())
+        ids = [m.get("id") for m in (data.get("data") or [])]
+        if GEN_MODEL not in ids:
+            raise RuntimeError(
+                f"{GEN_HEALTH_URL} does not list model {GEN_MODEL!r}; got {ids}. "
+                f"Check config.GEN_MODEL / models.local.json gen_model.")
+        return f"openai dialect -> {GEN_HEALTH_URL} lists {GEN_MODEL!r}"
+    with urllib.request.urlopen(GEN_HEALTH_URL, timeout=10) as r:
+        v = json.loads(r.read().decode())["version"]
+    return f"ollama dialect -> Ollama {v}  ({config.GEN_BASE})"
 
 
 # --- 2. Embedding model responds with the expected dimension ----------------
@@ -134,51 +155,43 @@ KEEP_ALIVE = getattr(ask, "KEEP_ALIVE", "30m")
 
 
 # --- 5. Generation model responds, thinking-free (small, non-streaming) ------
+# Routed through llm.chat() -- the same call ask.py/enrich.py/interview.py make
+# -- so this gate tests exactly what the service uses, in whichever dialect
+# config.GEN_DIALECT selects, rather than reimplementing the wire format here.
 def t_generate():
-    data = post_json(CHAT_URL, {
-        "model": GEN_MODEL,
-        "messages": [{"role": "user", "content": "Reply with the single word: ready."}],
-        "stream": False, "think": False, "keep_alive": KEEP_ALIVE,
-        "options": {"num_predict": 24, "temperature": 0},
-    }, timeout=120)
-    msg = data.get("message", {}).get("content", "").strip()
+    msg = llm.chat(
+        [{"role": "user", "content": "Reply with the single word: ready."}],
+        stream=False, temperature=0, max_tokens=24,
+    ).strip()
     if not msg:
         raise RuntimeError(f"empty response from {GEN_MODEL}")
     # Leak gate: we asked for one word. Deliberation in the content ("Hmm, the
-    # user...") means a thinking-family build is reasoning out loud despite
-    # think=False, which taxes every answer and can eat the num_predict budget.
+    # user...") means a thinking-family build/server is reasoning out loud
+    # despite thinking being disabled, which taxes every answer and can eat
+    # the output-token budget. (Reasoning text from the remote OpenAI-dialect
+    # endpoint is a server bug per its contract -- thinking is forced off
+    # server-side there -- so this gate catches that too, it just reports it
+    # as leakage rather than diagnosing the cause.)
     if "ready" not in msg.lower():
         raise RuntimeError(
             f"thinking leakage suspected: asked for one word, got {msg[:60]!r}. "
-            f"Use a non-thinking build (e.g. qwen3:4b-instruct-2507) as GEN_MODEL "
-            f"in config.py, or override it per-machine in models.local.json.")
-    return f"{GEN_MODEL} -> {msg[:40]!r}"
+            f"({GEN_DIALECT} dialect, model {GEN_MODEL!r}) Use a non-thinking "
+            f"model as GEN_MODEL, or override it per-machine in models.local.json.")
+    return f"{GEN_MODEL} ({GEN_DIALECT}) -> {msg[:40]!r}"
 
 
 # --- 6. Streaming works (the path the UI actually uses) ---------------------
 def t_stream():
-    payload = {
-        "model": GEN_MODEL,
-        "messages": [{"role": "user", "content": "Count: one two three."}],
-        "stream": True, "think": False, "keep_alive": KEEP_ALIVE,
-        "options": {"num_predict": 12, "temperature": 0},
-    }
-    req = urllib.request.Request(CHAT_URL, data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json"})
     pieces = 0
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        for line in resp:
-            line = line.strip()
-            if not line:
-                continue
-            obj = json.loads(line.decode())
-            if obj.get("message", {}).get("content"):
-                pieces += 1
-            if obj.get("done"):
-                break
+    for piece in llm.chat(
+        [{"role": "user", "content": "Count: one two three."}],
+        stream=True, temperature=0, max_tokens=12,
+    ):
+        if piece:
+            pieces += 1
     if pieces == 0:
         raise RuntimeError("stream produced no token chunks")
-    return f"{pieces} token chunks streamed"
+    return f"{pieces} token chunks streamed ({GEN_DIALECT} dialect)"
 
 
 REFUSAL = ask.REFUSAL_TEXT
@@ -188,16 +201,13 @@ def _grounded_answer(question, evidence):
     """Run the real system prompt + given evidence through the generation model."""
     user_msg = (f"Question: {question}\n\nEvidence passages:\n\n{evidence}\n\n"
                 "Answer using only the passages above, citing passage numbers.")
-    data = post_json(CHAT_URL, {
-        "model": GEN_MODEL,
-        "messages": [
+    return llm.chat(
+        [
             {"role": "system", "content": ask.SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
         ],
-        "stream": False, "think": False, "keep_alive": KEEP_ALIVE,
-        "options": {"num_predict": 300, "temperature": 0},
-    }, timeout=180)
-    return data.get("message", {}).get("content", "").strip()
+        stream=False, temperature=0, max_tokens=300,
+    ).strip()
 
 
 def t_grounding_answers():
@@ -746,40 +756,38 @@ BENCH_CSV = config.ROOT / "benchmarks.csv"
 
 
 def _bench_once():
-    """One streamed generation against the frozen prompt. Returns measured stats."""
+    """
+    One streamed generation against the frozen prompt. Returns measured stats.
+
+    Routed through llm.chat(), so this measures whatever dialect/endpoint is
+    actually configured (local Ollama or a remote OpenAI-dialect edge) instead
+    of a hardcoded Ollama payload. Token count is a character-based estimate
+    (len/4, same heuristic as ask.py's estimate_tokens) rather than Ollama's
+    exact eval_count, because that field is dialect-specific and llm.chat()
+    deliberately does not leak transport details to callers. load_s is no
+    longer measured for the same reason (Ollama's load_duration has no OpenAI
+    equivalent) and is always reported as 0.0.
+    """
     import time
     user_msg = (f"Question: {BENCH_QUESTION}\n\nEvidence passages:\n\n{BENCH_EVIDENCE}\n\n"
                 "Answer using only the passages above, citing passage numbers.")
-    payload = {
-        "model": GEN_MODEL,
-        "messages": [{"role": "system", "content": BENCH_SYSTEM},
-                     {"role": "user", "content": user_msg}],
-        "stream": True, "think": False, "keep_alive": KEEP_ALIVE,
-        "options": {"num_predict": 200, "temperature": 0},
-    }
-    req = urllib.request.Request(CHAT_URL, data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json"})
     t0 = time.time()
     ttft = None
-    done_obj = {}
-    with urllib.request.urlopen(req, timeout=300) as resp:
-        for line in resp:
-            line = line.strip()
-            if not line:
-                continue
-            obj = json.loads(line.decode())
-            if ttft is None and obj.get("message", {}).get("content"):
-                ttft = time.time() - t0
-            if obj.get("done"):
-                done_obj = obj
-                break
+    collected = []
+    for piece in llm.chat(
+        [{"role": "system", "content": BENCH_SYSTEM},
+         {"role": "user", "content": user_msg}],
+        stream=True, temperature=0, max_tokens=200,
+    ):
+        if ttft is None:
+            ttft = time.time() - t0
+        collected.append(piece)
     total = time.time() - t0
-    eval_count = done_obj.get("eval_count", 0)
-    eval_ns = done_obj.get("eval_duration", 0)
-    load_s = done_obj.get("load_duration", 0) / 1e9
-    tok_s = (eval_count / (eval_ns / 1e9)) if eval_ns else 0.0
+    text = "".join(collected)
+    eval_count = max(1, len(text) // 4)
+    tok_s = (eval_count / total) if total > 0 else 0.0
     return {"ttft": ttft or total, "total": total, "eval_count": eval_count,
-            "tok_s": tok_s, "load_s": load_s}
+            "tok_s": tok_s, "load_s": 0.0}
 
 
 def _bench_log(run, r):
@@ -804,12 +812,13 @@ def t_benchmark():
 
 def main():
     print("Cairn self-test\n" + "=" * 40)
-    print(f"Embedding model : {EMBED_MODEL}")
-    print(f"Generation model: {GEN_MODEL}")
+    print(f"Embedding model : {EMBED_MODEL}  ({config.EMBED_BASE})")
+    print(f"Generation model: {GEN_MODEL}  ({GEN_DIALECT} dialect, {config.GEN_BASE})")
     print(f"Expected dim    : {config.EMBEDDING_DIM}\n")
 
     ordered = [
-        ("Ollama server reachable", t_server),
+        ("Embedding server reachable", t_embed_server),
+        ("Generation endpoint reachable", t_gen_health),
         ("Embedding model + dimension", t_embed),
         ("Database + vectors", t_db),
         ("Retrieval (embed + KNN)", t_retrieve),
@@ -837,7 +846,8 @@ def main():
         ok = check(name, fn)
         all_ok = all_ok and ok
         # stop early on the first failure whose downstream checks would just cascade
-        if not ok and name in ("Ollama server reachable", "Embedding model + dimension", "Database + vectors"):
+        if not ok and name in ("Embedding server reachable", "Generation endpoint reachable",
+                                "Embedding model + dimension", "Database + vectors"):
             print("\n(stopping: later checks depend on this one)")
             break
 
