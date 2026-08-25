@@ -270,6 +270,8 @@ def t_citation_range():
         ("Passages [1]-[6] discuss this.", 5, [6]),
         ("See [6], [7] and [2].", 5, [6, 7]),
         ("Citing [0] which cannot exist.", 5, [0]),
+        ("Grouped citation [1, 2] counts.", 5, []),
+        ("Grouped phantom [2, 6] is caught.", 5, [6]),
         ("No citations at all.", 5, []),
         ("Cited [3] with nothing retrieved.", 0, [3]),
     ]

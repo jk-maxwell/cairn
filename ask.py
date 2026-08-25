@@ -125,9 +125,12 @@ SYSTEM_PROMPT = (
     "or narrow their question for a better result.\n"
     "CASE 2. The passages are on the question's topic but do not contain the answer. "
     "Reply in AT MOST THREE SENTENCES: say that the saved material does not address the "
-    "specific question, then say what the retrieved passages DO cover, citing each by "
-    "number. Do not speculate about what other material might say. Do not use the refusal "
-    "sentence from case 3, and do not write a long explanation of the gap.\n"
+    "specific question, then say what the retrieved passages DO cover. Each thing you say "
+    "a passage covers MUST carry that passage's number in square brackets, exactly as in "
+    "case 1 — for example: \"The retrieved passages instead describe how such records are "
+    "stored [1] and who may access them [2].\" A case 2 reply with no bracketed passage "
+    "number is malformed. Do not speculate about what other material might say. Do not use "
+    "the refusal sentence from case 3, and do not write a long explanation of the gap.\n"
     "CASE 3. NO passage relates to the question's subject at all. Your ENTIRE reply is "
     "this sentence, on its own, with no preamble and nothing after it: "
     "\"" + REFUSAL_TEXT + "\" Do NOT explain why you are declining, do NOT describe what "
@@ -169,12 +172,16 @@ def retrieval_strength(top_distance):
 # Instead the defect is labelled in the open, which is the receipts rule applied
 # to Cairn's own output.
 
-CITATION_RE = re.compile(r"\[(\d{1,3})\]")
+# A citation is one bracket holding 1-3 digit passage number(s); models also emit
+# the grouped form "[1, 2]", which must parse the same as "[1] [2]" — both for
+# crediting real citations and for catching phantoms hidden in a group ("[1, 6]").
+CITATION_RE = re.compile(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]")
 
 
 def cited_indices(text: str):
-    """Every bracketed passage number appearing in an answer."""
-    return {int(m) for m in CITATION_RE.findall(text or "")}
+    """Every bracketed passage number appearing in an answer, grouped or not."""
+    return {int(n) for m in CITATION_RE.findall(text or "")
+            for n in m.split(",")}
 
 
 def phantom_citations(text: str, evidence_count: int):
