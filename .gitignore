@@ -26,6 +26,12 @@ vault/
 *.sqlite3
 # local speed log; metrics only, but it is machine-local
 benchmarks.csv
+# governance event log: the ratification-burden instrument. Carries entity_id
+# hashes and never names, but it is a record of this user's structure decisions
+# and their timing. Machine-local.
+governance.csv
+# ratification-burden readings appended by selftest.py; counts only
+burden.csv
 # local gate output
 gates.txt
 _ingest_failures.log

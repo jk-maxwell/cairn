@@ -609,7 +609,10 @@ def _ratify_new(conn, name: str, etype: str, aliases: list, vault_dir) -> str | 
             _merge_aliases(conn, row[0], aliases, vault_dir)
         log.info("interview write: %s %r already ratified; merged aliases only", etype, name)
         return None
-    registry.propose(conn, name, etype, None)
+    # origin='interview' from the start, not flipped afterwards: this proposal
+    # is ratified in the same breath and never reaches Inbox/Governance.md, so
+    # the governance event log must not count it as queue burden.
+    registry.propose(conn, name, etype, None, origin="interview")
     row = conn.execute(
         "SELECT entity_id FROM entities WHERE type=? AND lower(name)=? AND status='proposed'",
         (etype, name.strip().lower())).fetchone()

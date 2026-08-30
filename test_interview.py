@@ -317,6 +317,9 @@ def main():
     env = os.environ.copy()
     env["CAIRN_DB_PATH"] = str(db_path)
     env["CAIRN_VAULT_DIR"] = str(vault)
+    # The scripted interview ratifies real entities. Keep its governance events
+    # out of the real governance.csv, which is the ratification-burden log.
+    env["CAIRN_GOVERNANCE_LOG"] = str(tmp / "governance.csv")
 
     print(f"temp dir : {tmp}\nserver   : {base}\nstarting ask.py ...")
     with open(log_path, "w", encoding="utf-8") as logf:

@@ -25,9 +25,16 @@ block between the cairn markers, which regenerate_rollups() rewrites.
 Every function takes the vault directory explicitly so tests run against a
 temp vault; nothing here reads config.VAULT_DIR except the __main__ CLI.
 
+Every governance event (proposed, ratified, rejected) is also appended to
+governance.csv, an append-only measurement log carrying no names. It is the
+source for the ratification-burden numbers reported by selftest.py -- see
+burden_stats() below for what those numbers mean and why the entities table
+cannot answer the question on its own.
+
 CLI:
     py registry.py --scan       resync the DB index from the vault pages
     py registry.py --queue      apply queue edits, then rewrite the queue note
+    py registry.py --burden     print the ratification-burden numbers
     py registry.py --migrate    one-time conversion of a pre-governance DB:
                                 every existing entity becomes a proposal, the
                                 generated Cairn/People and Cairn/Projects
@@ -36,9 +43,12 @@ CLI:
 """
 
 import argparse
+import csv
 import hashlib
 import json
+import os as _os
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 MARK_BEGIN = "<!-- cairn:begin -->"
@@ -67,6 +77,181 @@ def _log(msg: str) -> None:
 
 def _sha1(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()
+
+
+# ---- the governance event log (ratification burden) -------------------------
+# Append-only, one row per governance event, written the moment the event
+# happens. This is a measurement instrument, not state: deleting it changes no
+# behaviour, exactly like benchmarks.csv.
+#
+# It exists because the burden a governance queue puts on its owner cannot be
+# read off the entities table. That table holds only the current status, and
+# origin is overwritten in place when an interview rules on an extraction
+# proposal (interview.py flips it to 'interview' after ratify). An append-only
+# log records what happened when it happened, and is immune to later edits of
+# the row it describes.
+#
+# NO NAMES. A row carries the entity_id -- a hash of type + lowercased name --
+# never the name itself. The burden numbers do not need the names, and this
+# file is measurement telemetry that must stay safe to read, copy, and quote.
+# It is gitignored anyway; both facts are the guard, not one of them.
+#
+# CAIRN_GOVERNANCE_LOG redirects it, mirroring the CAIRN_DB_PATH /
+# CAIRN_VAULT_DIR overrides in config.py. Tests that drive real ratifications
+# in a subprocess set it so a test run cannot inflate the real burden numbers;
+# in-process tests rebind this module attribute instead.
+GOVERNANCE_LOG = Path(
+    _os.environ.get("CAIRN_GOVERNANCE_LOG")
+    or (Path(__file__).resolve().parent / "governance.csv"))
+GOVERNANCE_LOG_HEADER = ["utc_timestamp", "event", "entity_id", "type", "origin"]
+
+# Origins that mean "the user authored this directly" rather than "the engine
+# raised it and the user must rule on it". Structure seeded in an interview or
+# by writing a page in the vault never sat in the queue, so it is never burden.
+NON_QUEUE_ORIGINS = {"interview", "seed"}
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _log_event(event: str, entity_id: str, etype: str, origin: str | None) -> None:
+    """Append one governance event. Never raises: a broken measurement log must
+    not be able to break ratification. A failure is reported and swallowed."""
+    try:
+        path = Path(GOVERNANCE_LOG)
+        new = not path.exists()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(GOVERNANCE_LOG_HEADER)
+            w.writerow([_now_utc().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        event, entity_id, etype, origin or ""])
+    except Exception as e:  # pragma: no cover - instrument failure, not logic
+        _log(f"WARN governance log write failed ({e}); burden metric will undercount")
+
+
+def _origin_of(conn, entity_id: str) -> str | None:
+    row = conn.execute("SELECT origin FROM entities WHERE entity_id=?", (entity_id,)).fetchone()
+    return row[0] if row else None
+
+
+def read_governance_log(path=None) -> list[dict]:
+    """Parse the event log into rows with real datetimes. Malformed lines are
+    skipped rather than fatal -- the log is append-only and may have been
+    truncated mid-write by a kill."""
+    path = Path(path or GOVERNANCE_LOG)
+    if not path.exists():
+        return []
+    out = []
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            try:
+                ts = datetime.strptime(row["utc_timestamp"], "%Y-%m-%dT%H:%M:%SZ").replace(
+                    tzinfo=timezone.utc)
+            except (ValueError, KeyError, TypeError):
+                continue
+            out.append({"ts": ts, "event": (row.get("event") or "").strip(),
+                        "entity_id": (row.get("entity_id") or "").strip(),
+                        "type": (row.get("type") or "").strip(),
+                        "origin": (row.get("origin") or "").strip()})
+    return out
+
+
+def burden_stats(events, now, windows=(7, 28)) -> dict:
+    """
+    Ratification burden, computed from governance events. Pure function.
+
+    The question it answers: is the governance queue something its owner keeps
+    up with, or is it filling faster than it drains? A queue that grows without
+    bound is the failure this product exists to avoid -- structure work that
+    outpaces the value it produces, until the vault is abandoned.
+
+    Definitions, chosen so the numbers mean one thing each:
+
+      arrival  a 'proposed' event whose origin is NOT user-authored. Only these
+               ever appeared in Inbox/Governance.md for a human to rule on.
+               Interview-seeded structure is proposed and ratified in the same
+               act and never reaches the queue, so it is not burden.
+      drain    a 'ratified' or 'rejected' event. Counted by entity_id, so an
+               interview ruling on an extraction proposal still counts as a
+               drain -- which it is.
+      pending  arrived, never drained.
+
+    A decision whose arrival is not in the log is still a real decision and
+    still counts toward the drain rate; it is tracked as `backlog_drained`.
+    That case is the proposals that already existed when the log started (the
+    entities table carries no timestamps, so their arrival time is genuinely
+    unknown and is not invented here). It is excluded from the decision-latency
+    median, which would otherwise be computed from a date nobody recorded.
+
+    The pass is SEQUENTIAL, over events in time order, rather than a first-wins
+    lookup per entity_id. An entity_id is a hash of type plus lowercased name,
+    so a name that is proposed, ratified, has its page deleted (which drops the
+    row entirely) and is then proposed again reuses the same id. First-wins
+    would score that second arrival as already decided and lose it. Tracking an
+    open queue slot instead counts each trip through the queue as its own
+    arrival and its own decision, which is what the owner actually experienced.
+
+    `now` is passed in rather than read, so the arithmetic is testable against
+    a fixed clock.
+    """
+    events = sorted(events, key=lambda e: e["ts"])
+
+    open_arrival: dict[str, datetime] = {}   # in the queue right now, awaiting a ruling
+    seeded_open: set[str] = set()            # proposed by user authorship; ruling is not a drain
+    arrivals: list[datetime] = []            # every trip into the queue
+    completed: list[tuple[datetime, datetime]] = []   # (arrived, decided) pairs
+    backlog: list[datetime] = []             # decisions with no recorded arrival
+
+    for e in events:
+        eid = e["entity_id"]
+        if e["event"] == "proposed":
+            if e["origin"] in NON_QUEUE_ORIGINS:
+                seeded_open.add(eid)
+            elif eid not in open_arrival:
+                open_arrival[eid] = e["ts"]
+                arrivals.append(e["ts"])
+        elif e["event"] in ("ratified", "rejected"):
+            if eid in open_arrival:
+                completed.append((open_arrival.pop(eid), e["ts"]))
+            elif eid in seeded_open:
+                seeded_open.discard(eid)     # proposed and ratified in one act
+            else:
+                backlog.append(e["ts"])      # arrived before the log existed
+
+    decisions = [ts for _a, ts in completed] + backlog
+    stats = {
+        "events": len(events),
+        "arrived_total": len(arrivals),
+        "drained_total": len(completed),
+        "backlog_drained_total": len(backlog),
+        "pending": len(open_arrival),
+        "oldest_pending_days": (
+            round((now - min(open_arrival.values())).total_seconds() / 86400.0, 1)
+            if open_arrival else 0.0),
+    }
+    for w in windows:
+        cutoff = now - timedelta(days=w)
+        arr = sum(1 for ts in arrivals if ts >= cutoff)
+        dec = sum(1 for ts in decisions if ts >= cutoff)
+        stats[f"proposed_{w}d"] = arr
+        stats[f"decided_{w}d"] = dec
+        stats[f"net_{w}d"] = arr - dec
+
+    # How long a decision takes, over every decision whose arrival was recorded.
+    # The clearest single signal of whether the queue is being kept up with: a
+    # rising median means proposals are sitting, which is the state just before
+    # abandonment.
+    lags = sorted((d - a).total_seconds() / 86400.0 for a, d in completed)
+    if lags:
+        mid = len(lags) // 2
+        median = lags[mid] if len(lags) % 2 else (lags[mid - 1] + lags[mid]) / 2
+        stats["median_decision_days"] = round(median, 1)
+    else:
+        stats["median_decision_days"] = 0.0
+    return stats
 
 
 _UNSAFE_CHARS = re.compile(r'[\\/:*?"<>|]')
@@ -203,11 +388,19 @@ def match(conn, name: str, etype: str) -> str | None:
 
 # ---- proposals --------------------------------------------------------------
 
-def propose(conn, name: str, etype: str, doc_id: str | None) -> bool:
+def propose(conn, name: str, etype: str, doc_id: str | None,
+            origin: str = "extraction") -> bool:
     """Record a governance proposal for `name` unless it already matches a
     ratified, proposed, or rejected entity of this type (so a rejection is
     permanent and a pending proposal is not duplicated). Provenance is the
-    meeting_entities link to doc_id. Returns True only when newly proposed."""
+    meeting_entities link to doc_id. Returns True only when newly proposed.
+
+    `origin` records who raised it. The default, 'extraction', is the engine
+    finding a name in a document -- a proposal that will sit in the queue until
+    a human rules on it, and therefore burden. A caller that is itself the act
+    of user authorship (interview.py's propose-then-ratify) passes 'interview',
+    which keeps the row out of the burden arithmetic because it never reaches
+    the queue."""
     name = (name or "").strip()
     if not name:
         return False
@@ -227,12 +420,13 @@ def propose(conn, name: str, etype: str, doc_id: str | None) -> bool:
     entity_id = _sha1(f"{etype}:{name.lower()}")[:16]
     conn.execute(
         "INSERT OR IGNORE INTO entities (entity_id, name, type, aliases, note_path, status, origin) "
-        "VALUES (?,?,?,?,NULL,'proposed','extraction')",
-        (entity_id, name, etype, "[]"),
+        "VALUES (?,?,?,?,NULL,'proposed',?)",
+        (entity_id, name, etype, "[]", origin),
     )
     _link_provenance(conn, doc_id, entity_id)
     conn.commit()
-    _log(f"proposed {etype} {name!r} (doc={doc_id or 'none'})")
+    _log(f"proposed {etype} {name!r} (doc={doc_id or 'none'}, origin={origin})")
+    _log_event("proposed", entity_id, etype, origin)
     return True
 
 
@@ -297,6 +491,9 @@ def ratify(conn, entity_id: str, vault_dir) -> str:
     )
     conn.commit()
     _log(f"ratified {etype} {name!r} -> {page.name}")
+    # Read origin now: interview.py overwrites it to 'interview' immediately
+    # after this returns, and the log must record the state at event time.
+    _log_event("ratified", entity_id, etype, _origin_of(conn, entity_id))
     _regenerate_rollup_for(conn, entity_id, page)
     return str(page)
 
@@ -305,12 +502,13 @@ def reject(conn, entity_id: str) -> None:
     """Flip to 'rejected'. The row is kept forever so propose() never raises
     the same name again."""
     row = conn.execute(
-        "SELECT name, type FROM entities WHERE entity_id=?", (entity_id,)
+        "SELECT name, type, origin FROM entities WHERE entity_id=?", (entity_id,)
     ).fetchone()
     conn.execute("UPDATE entities SET status='rejected' WHERE entity_id=?", (entity_id,))
     conn.commit()
     if row:
         _log(f"rejected {row[1]} {row[0]!r}")
+        _log_event("rejected", entity_id, row[1], row[2])
 
 
 # ---- vault scan: the vault is authoritative ---------------------------------
@@ -399,6 +597,11 @@ def scan_vault(conn, vault_dir) -> dict:
                 counts["updated"] += 1
                 if rstatus != "ratified":
                     _log(f"scan ratified {etype} {name!r} (user created {page.name} directly)")
+                    # This drains the queue without going through ratify(): the
+                    # user answered a proposal by writing the page rather than
+                    # by checking the box. It is a decision, and an unlogged
+                    # decision makes every drain figure wrong.
+                    _log_event("ratified", eid, etype, _origin_of(conn, eid))
             else:
                 counts["unchanged"] += 1
 
@@ -669,11 +872,13 @@ def main():
     ap = argparse.ArgumentParser(description="Cairn entity registry")
     ap.add_argument("--scan", action="store_true", help="resync the DB index from vault pages")
     ap.add_argument("--queue", action="store_true", help="apply queue edits, then rewrite the queue note")
+    ap.add_argument("--burden", action="store_true",
+                    help="print ratification-burden numbers from governance.csv")
     ap.add_argument("--migrate", action="store_true",
                     help="one-time: convert all existing entities to proposals, "
                          "delete generated Cairn/People|Projects pages, write the queue note")
     args = ap.parse_args()
-    if not (args.scan or args.queue or args.migrate):
+    if not (args.scan or args.queue or args.burden or args.migrate):
         ap.print_help()
         return
 
@@ -690,6 +895,26 @@ def main():
             write_queue_note(conn, config.VAULT_DIR)
             regenerate_rollups(conn, config.VAULT_DIR)
             print(f"queue: {edits}")
+        if args.burden:
+            stats = burden_stats(read_governance_log(), _now_utc())
+            db_pending = conn.execute(
+                "SELECT COUNT(*) FROM entities WHERE status='proposed'").fetchone()[0]
+            untracked = db_pending - stats["pending"]
+            print(f"governance log: {GOVERNANCE_LOG}")
+            print(f"  pending now      : {db_pending}" +
+                  (f"  ({untracked} predate the log and have no arrival date)"
+                   if untracked else ""))
+            print(f"  oldest pending   : "
+                  + (f"{stats['oldest_pending_days']} days" if stats["pending"]
+                     else "n/a (nothing pending is tracked)"))
+            print(f"  last 7 days      : +{stats['proposed_7d']} proposed, "
+                  f"-{stats['decided_7d']} decided, net {stats['net_7d']:+d}")
+            print(f"  last 28 days     : +{stats['proposed_28d']} proposed, "
+                  f"-{stats['decided_28d']} decided, net {stats['net_28d']:+d}")
+            print(f"  median decision  : "
+                  + (f"{stats['median_decision_days']} days over "
+                     f"{stats['drained_total']} decision(s)" if stats["drained_total"]
+                     else "n/a (no decision with a recorded arrival yet)"))
     finally:
         conn.close()
 

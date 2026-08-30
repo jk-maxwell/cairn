@@ -8,6 +8,12 @@ frozen benchmark prompt and appends every run to benchmarks.csv, so model swaps
 are compared with data rather than impressions. The benchmark prompt never
 changes, for the same reason survey questions never change.
 
+The suite carries a second dial on the same speedometer: ratification burden,
+appended to burden.csv. Speed is what the machine costs; burden is what the
+governance queue costs its owner, which is the other way this product fails.
+Both report and log rather than gate, because there is no defensible threshold
+for either yet.
+
 Run:  py selftest.py
 """
 
@@ -485,6 +491,11 @@ def t_registry_governance():
     import registry
 
     tmp = Path(tempfile.mkdtemp(prefix="cairn-selftest-registry-"))
+    # This gate proposes, ratifies and rejects for real. Point the governance
+    # event log at the temp directory so a preflight run cannot inflate the
+    # burden numbers the next gate measures.
+    real_log = registry.GOVERNANCE_LOG
+    registry.GOVERNANCE_LOG = tmp / "governance.csv"
     try:
         conn = sqlite3.connect(tmp / "t.db")
         conn.execute("PRAGMA foreign_keys = ON")
@@ -533,10 +544,204 @@ def t_registry_governance():
             raise RuntimeError(f"deleted line did not reject: {edits}")
         if registry.propose(conn, "Discarded Idea", "project", None):
             raise RuntimeError("a rejected name was re-proposed")
+
+        # Every one of those events reached the log, and no name did.
+        logged = registry.read_governance_log(registry.GOVERNANCE_LOG)
+        kinds = [r["event"] for r in logged]
+        if kinds != ["proposed", "ratified", "proposed", "rejected"]:
+            raise RuntimeError(f"governance log recorded {kinds}, expected "
+                               f"['proposed', 'ratified', 'proposed', 'rejected']")
+        raw = registry.GOVERNANCE_LOG.read_text(encoding="utf-8")
+        for name in ("Unheard Of", "Discarded Idea", "Fixture Project"):
+            if name in raw:
+                raise RuntimeError(f"governance log leaked the entity name {name!r}")
         conn.close()
-        return "match links ratified only; propose/ratify/reject round-trip holds"
+        return (f"match links ratified only; propose/ratify/reject round-trip holds; "
+                f"{len(logged)} events logged, no names")
     finally:
+        registry.GOVERNANCE_LOG = real_log
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+BURDEN_CSV = config.ROOT / "burden.csv"
+BURDEN_FIELDS = ["utc_timestamp", "pending", "pending_tracked", "oldest_pending_days",
+                 "median_decision_days", "decisions_measured",
+                 "proposed_7d", "decided_7d", "net_7d",
+                 "proposed_28d", "decided_28d", "net_28d",
+                 "docs", "proposals_per_doc", "log_coverage"]
+
+
+def _burden_table_cases():
+    """
+    The arithmetic, against a fixed clock. Written as a table for the same
+    reason t_citation_range is: the definitions are the interesting part, and a
+    definition that drifts should fail here rather than quietly change what the
+    speedometer means.
+    """
+    from datetime import datetime, timedelta, timezone
+    import registry
+
+    now = datetime(2026, 8, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+    def ev(days_ago, event, eid, origin="extraction"):
+        return {"ts": now - timedelta(days=days_ago), "event": event,
+                "entity_id": eid, "type": "project", "origin": origin}
+
+    cases = [
+        ("empty log", [], {"pending": 0, "proposed_7d": 0, "decided_7d": 0,
+                           "oldest_pending_days": 0.0, "median_decision_days": 0.0}),
+        # Three arrive this week, one is ruled on. The queue is growing.
+        ("growing queue",
+         [ev(6, "proposed", "a"), ev(5, "proposed", "b"), ev(2, "proposed", "c"),
+          ev(1, "ratified", "a")],
+         {"pending": 2, "proposed_7d": 3, "decided_7d": 1, "net_7d": 2,
+          "oldest_pending_days": 5.0}),
+        # A rejection drains the queue exactly as a ratification does.
+        ("rejection drains",
+         [ev(10, "proposed", "a"), ev(3, "rejected", "a")],
+         {"pending": 0, "drained_total": 1, "proposed_7d": 0, "decided_7d": 1,
+          "net_7d": -1, "median_decision_days": 7.0}),
+        # Interview-seeded structure is proposed and ratified in one act and
+        # never reaches the queue: it is not burden, in either direction.
+        ("interview seeding is not burden",
+         [ev(1, "proposed", "s", origin="interview"), ev(1, "ratified", "s", origin="interview")],
+         {"arrived_total": 0, "drained_total": 0, "pending": 0,
+          "proposed_7d": 0, "decided_7d": 0}),
+        # An extraction proposal ruled on inside an interview IS a drain: it sat
+        # in the queue, and the origin column was overwritten after the fact.
+        ("interview ruling on an extraction proposal counts",
+         [ev(9, "proposed", "x"), ev(2, "ratified", "x", origin="interview")],
+         {"arrived_total": 1, "drained_total": 1, "pending": 0, "decided_7d": 1,
+          "median_decision_days": 7.0}),
+        # The 28-day window sees what the 7-day window has already forgotten.
+        ("windows are independent",
+         [ev(20, "proposed", "a"), ev(3, "proposed", "b")],
+         {"proposed_7d": 1, "proposed_28d": 2, "pending": 2,
+          "oldest_pending_days": 20.0}),
+        # A decision whose arrival predates the log is still a real decision. It
+        # counts toward the drain rate, but not toward decision latency, which
+        # would have to be computed from an arrival date nobody recorded.
+        ("decision on a pre-log proposal counts as drain, not as latency",
+         [ev(1, "ratified", "ghost")],
+         {"arrived_total": 0, "drained_total": 0, "backlog_drained_total": 1,
+          "pending": 0, "decided_7d": 1, "net_7d": -1, "median_decision_days": 0.0}),
+        # ...but interview seeding still contributes nothing on either side,
+        # even though its ratification also has no queue arrival.
+        ("interview seeding is not a backlog drain either",
+         [ev(1, "proposed", "s", origin="interview"), ev(1, "ratified", "s", origin="interview")],
+         {"backlog_drained_total": 0, "decided_7d": 0, "net_7d": 0}),
+        # entity_id is a hash of type + lowercased name, so a name that goes
+        # through the queue, is ratified, has its page deleted (dropping the
+        # row) and is then re-proposed reuses the same id. That is two trips
+        # through the queue and two things asked of the owner, not one.
+        ("the same name through the queue twice counts twice",
+         [ev(20, "proposed", "a"), ev(18, "ratified", "a"),
+          ev(5, "proposed", "a"), ev(4, "rejected", "a")],
+         {"arrived_total": 2, "drained_total": 2, "pending": 0,
+          "proposed_28d": 2, "decided_28d": 2, "proposed_7d": 1, "decided_7d": 1,
+          "median_decision_days": 1.5}),
+        # ...and a re-proposal still open is pending, not silently pre-decided.
+        ("re-proposal after an earlier decision is pending again",
+         [ev(20, "proposed", "a"), ev(18, "rejected", "a"), ev(3, "proposed", "a")],
+         {"arrived_total": 2, "drained_total": 1, "pending": 1,
+          "oldest_pending_days": 3.0}),
+        # Out-of-order rows (two writers, one clock skew) must not change the
+        # answer: the pass sorts before pairing.
+        ("event order in the file does not matter",
+         [ev(2, "ratified", "a"), ev(9, "proposed", "a")],
+         {"arrived_total": 1, "drained_total": 1, "backlog_drained_total": 0,
+          "pending": 0, "median_decision_days": 7.0}),
+    ]
+    for label, events, expected in cases:
+        got = registry.burden_stats(events, now)
+        for key, want in expected.items():
+            if got[key] != want:
+                raise RuntimeError(f"{label}: {key} = {got[key]!r}, expected {want!r}")
+    return len(cases)
+
+
+def t_ratification_burden():
+    """
+    Ratification burden: how much structure work the queue is asking of its owner.
+
+    A speedometer, not a gate, exactly like the benchmark below -- it reports and
+    logs, and it does not fail on a number it does not like, because there is no
+    defensible threshold yet and inventing one would be a claim without evidence.
+
+    What it DOES fail on is a broken instrument: the arithmetic drifting from its
+    table, or the log accounting for more pending proposals than the database
+    actually holds, which is what a future write path that ratifies without
+    logging would look like.
+    """
+    from datetime import datetime, timezone
+    import registry
+
+    ncases = _burden_table_cases()
+
+    events = registry.read_governance_log()
+    now = datetime.now(timezone.utc)
+    s = registry.burden_stats(events, now)
+
+    conn = dbmod.connect()
+    dbmod.init_db(conn)
+    db_pending = conn.execute(
+        "SELECT COUNT(*) FROM entities WHERE status='proposed'").fetchone()[0]
+    docs = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    conn.close()
+
+    # The instrument check. The log may know about FEWER pending proposals than
+    # the database holds -- proposals raised before the log existed, or after it
+    # was deleted, are simply invisible to it. It must never know about MORE:
+    # that means decisions are happening without being logged, and every burden
+    # number computed from this file is then wrong in the direction that hides
+    # the problem.
+    if s["pending"] > db_pending:
+        raise RuntimeError(
+            f"governance log accounts for {s['pending']} pending proposal(s) but the "
+            f"database holds {db_pending}. A ratify/reject path is not logging its "
+            f"event, so drain is undercounted. Check every writer of entities.status.")
+
+    coverage = round(s["pending"] / db_pending, 2) if db_pending else 1.0
+    per_doc = round(s["arrived_total"] / docs, 2) if docs else 0.0
+
+    row = {
+        "utc_timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "pending": db_pending,
+        "pending_tracked": s["pending"],
+        "oldest_pending_days": s["oldest_pending_days"],
+        "median_decision_days": s["median_decision_days"],
+        "decisions_measured": s["drained_total"],
+        "proposed_7d": s["proposed_7d"], "decided_7d": s["decided_7d"], "net_7d": s["net_7d"],
+        "proposed_28d": s["proposed_28d"], "decided_28d": s["decided_28d"],
+        "net_28d": s["net_28d"],
+        "docs": docs, "proposals_per_doc": per_doc, "log_coverage": coverage,
+    }
+    import csv as _csv
+    new = not BURDEN_CSV.exists()
+    with open(BURDEN_CSV, "a", encoding="utf-8", newline="") as f:
+        w = _csv.DictWriter(f, fieldnames=BURDEN_FIELDS)
+        if new:
+            w.writeheader()
+        w.writerow(row)
+
+    # Report the age and latency figures ONLY over what the log actually covers.
+    # Printing "8 pending, oldest 0.0 days" when the log knows about none of the
+    # eight would read as a healthy queue, which is the opposite of the truth.
+    untracked = db_pending - s["pending"]
+    age = (f"oldest {s['oldest_pending_days']}d" if s["pending"]
+           else "no tracked pending")
+    lat = (f"median decision {s['median_decision_days']}d over {s['drained_total']}"
+           if s["drained_total"] else "no measurable decision yet")
+    print(f"      queue: {db_pending} pending" +
+          (f" ({untracked} predate the log)" if untracked else "") +
+          f", {age}, {lat}")
+    print(f"      7d: +{s['proposed_7d']} / -{s['decided_7d']} (net {s['net_7d']:+d})   "
+          f"28d: +{s['proposed_28d']} / -{s['decided_28d']} (net {s['net_28d']:+d})   "
+          f"{per_doc} proposals/doc over {docs} doc(s)")
+    if not events:
+        print("      (governance.csv is empty: rates start accruing from the next proposal)")
+    return (f"{ncases} arithmetic cases correct; {db_pending} pending, "
+            f"net_7d {s['net_7d']:+d} -> burden.csv")
 
 
 def t_strength_labels():
@@ -836,6 +1041,7 @@ def main():
         ("Retrieval: no-hope floor skips the model", t_no_hope_floor),
         ("Retrieval-strength labels", t_strength_labels),
         ("Registry: engine links ratified structure, never invents it", t_registry_governance),
+        ("Burden: ratification queue arrival vs drain", t_ratification_burden),
         ("Protocol: cairn is a selectable model", t_protocol_discovery),
         ("Protocol: contract holds against a hostile client", t_protocol_contract),
         ("Protocol: CORS allowlist", t_protocol_cors),

@@ -426,6 +426,10 @@ def run(tmp: Path):
 
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="cairn-test-registry-"))
+    # These cases propose, ratify and reject for real. Redirect the governance
+    # event log into the temp directory so a test run never inflates the
+    # ratification-burden numbers measured from the real one.
+    registry.GOVERNANCE_LOG = tmp / "governance.csv"
     try:
         run(tmp)
     finally:
