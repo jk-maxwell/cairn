@@ -6,7 +6,7 @@ Cairn answers questions from the documents you saved, and cites a source for eve
 
 A cairn is a small stack of stones that marks a trail. Each one is built from what was already there, and it exists so the traveler can find the way. This tool works the same way: it takes what you have already collected and turns it into a marker you can navigate by.
 
-> **Status: early.** The engine works and is gated by a 25-check preflight suite. The product around it is not built yet. It has run on a small number of machines, answers currently take longer than they should, and installing it is harder than it needs to be. See the [Roadmap](ROADMAP.md) for exactly what is true today and what is next. If you want something finished, come back later. If you want to shape it, now is a good time.
+> **Status: early.** The engine works and is gated by a 26-check preflight suite. The product around it is not built yet. It has run on a small number of machines, answers currently take longer than they should, and installing it is harder than it needs to be. See the [Roadmap](ROADMAP.md) for exactly what is true today and what is next. If you want something finished, come back later. If you want to shape it, now is a good time.
 
 ---
 
@@ -69,7 +69,7 @@ cp ~/some-policies/*.pdf sources/
 ./.venv/bin/python ingest.py     # convert and chunk
 ./.venv/bin/python index.py      # embed into the local vector index
 
-# 4. Check everything is wired up (25 gates)
+# 4. Check everything is wired up (26 gates)
 ./.venv/bin/python selftest.py
 
 # 5. Ask

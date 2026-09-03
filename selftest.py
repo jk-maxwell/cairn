@@ -671,6 +671,129 @@ def t_registry_alias_round_trip():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def t_distillation_no_affect():
+    """
+    Distillation never records affect, tone, or assessments of individuals
+    (docs/DECISIONS.md, 2026-07 entry; THESIS.md section 5; RATIONALE.md 8.6).
+    The rule is implemented unconditionally in enrich.py's SYSTEM_PROMPT --
+    default-on, no setting, consistent with unratified proposal 6 of
+    docs/PROPOSALS_2026-08-29.md, which only adds a warned opt-out later.
+    Prompt and gate are deliberately redundant, per the standing house doctrine
+    (see the 2026-08-10 citation-range entry in DECISIONS.md): the prompt is
+    what usually prevents the defect, the gate is what proves it was prevented.
+
+    The checked-in fixture at tests/fixtures/affect-bait-transcript.md is an
+    invented meeting transcript with four real distillable items (a decision
+    on the Meridian launch date, Dana's Atlas-contract commitment due Friday,
+    an open question about the Q4 marketing budget, and Owen's action item to
+    draft and circulate a timeline) and four bait lines, one per forbidden
+    shape: a competence/defensiveness judgment about Marcus, an inferred
+    motive about Dana, a mood/checked-out description of Priya, and a
+    comparison praising Owen over Priya. Each bait line is itself phrased as
+    someone's stated intention to go relay the judgment ("I need to tell
+    Marcus directly that..."), because that is the realistic, natural-sounding
+    shape that actually pulled affect into `action_items` when this fixture
+    was run against the unmodified prompt in STEP 4 below -- earlier drafts of
+    this fixture that fenced the judgment off as a parenthetical aside were
+    reliably (and correctly) filtered out by extraction even with no
+    prohibition in the prompt at all, which is a fine property of the model
+    but useless for proving this gate can fail. This phrasing is the one that
+    empirically defeats the unprotected prompt.
+
+    This runs the real distillation path (enrich.enrich_meeting, which calls
+    enrich.extract against the live generation model and then
+    enrich.write_distillation_draft) against a TEMP vault and TEMP database,
+    never the real ones -- config.VAULT_DIR and registry.GOVERNANCE_LOG are
+    both redirected into the temp dir and restored in the finally block,
+    mirroring t_registry_governance.
+
+    On the assertion: this is live model output, so a naive "does the word
+    'frustrated' appear" check is worthless -- it can pass by luck (the model
+    paraphrased into different words while still leaking the judgment) or fail
+    by luck (the model used that word for an unrelated, legitimate reason).
+    Instead each baited sentence carries its own unique, invented, meaningless
+    marker word -- brindlefen, sorlenth, quellwarp, vintrace -- chosen because
+    no model would independently generate them and they carry no meaning of
+    their own, so they cannot enter the draft by coincidence of ordinary
+    wording. A structured-extraction model at temperature 0 tends to lift
+    phrasing close to verbatim rather than freely paraphrase, so if the
+    prohibition fails to suppress a baited clause, the marker sitting inside
+    that clause is dragged along with it. A marker's presence in the draft is
+    therefore unambiguous evidence the prohibition leaked, not a coincidence.
+    The converse is not claimed: a clean draft is evidence the prohibition
+    held for THIS fixture, not a proof no affect could ever leak in different
+    wording -- which is exactly why the gate exists to be re-run on every
+    change to the prompt, not trusted once.
+
+    The substance check is equally load-bearing and independent of the
+    markers: it asserts the draft still names the real decision (the Meridian
+    launch date change), the real commitment (Dana / Atlas / Friday), the real
+    open question (the Q4 marketing budget), and the real action item (Owen /
+    timeline). Without this half, the gate could pass simply because the model
+    produced an empty or useless draft -- which would prove nothing about the
+    prohibition and everything about a broken extraction pass.
+    """
+    import shutil
+    import sqlite3
+    import tempfile
+    import enrich
+    import registry
+
+    fixture = config.ROOT / "tests" / "fixtures" / "affect-bait-transcript.md"
+    text = fixture.read_text(encoding="utf-8")
+
+    tmp = Path(tempfile.mkdtemp(prefix="cairn-selftest-affect-"))
+    real_vault = config.VAULT_DIR
+    real_log = registry.GOVERNANCE_LOG
+    config.VAULT_DIR = tmp / "vault"
+    registry.GOVERNANCE_LOG = tmp / "governance.csv"
+    try:
+        conn = sqlite3.connect(tmp / "t.db")
+        conn.execute("PRAGMA foreign_keys = ON")
+        dbmod.init_db(conn)
+        conn.execute(
+            "INSERT INTO documents (doc_id, source_path, source_name, vault_path) "
+            "VALUES (?,?,?,?)",
+            ("doc-affect-1", str(fixture), fixture.name, str(fixture)),
+        )
+        conn.commit()
+
+        result = enrich.enrich_meeting(conn, "doc-affect-1", fixture,
+                                        "Q3 Roadmap Review", text)
+        if result is None:
+            raise RuntimeError("enrichment returned None -- model did not produce valid JSON "
+                               "after retry; cannot judge the prohibition on no output")
+
+        draft_path = config.VAULT_DIR / "Inbox" / f"{result['distillation']}.md"
+        draft = draft_path.read_text(encoding="utf-8")
+        low = draft.lower()
+
+        markers = ["brindlefen", "sorlenth", "quellwarp", "vintrace"]
+        leaked = [m for m in markers if m in low]
+        if leaked:
+            raise RuntimeError(f"affect leaked into the distillation draft: bait marker(s) "
+                               f"{leaked} present verbatim -- draft was:\n{draft}")
+
+        substance = [
+            ("meridian" in low and "october" in low, "the decision (Meridian launch date change)"),
+            ("dana" in low and ("atlas" in low or "vendor" in low), "Dana's Atlas vendor commitment"),
+            ("budget" in low and "market" in low, "the Q4 marketing-budget open question"),
+            ("owen" in low and "timeline" in low, "Owen's timeline action item"),
+        ]
+        missing = [label for ok, label in substance if not ok]
+        if missing:
+            raise RuntimeError(f"real substance missing from draft (prohibition may have "
+                               f"over-stripped, or extraction is broken): {missing} -- "
+                               f"draft was:\n{draft}")
+
+        conn.close()
+        return "0/4 bait markers leaked; 4/4 real substance items present"
+    finally:
+        config.VAULT_DIR = real_vault
+        registry.GOVERNANCE_LOG = real_log
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 BURDEN_CSV = config.ROOT / "burden.csv"
 BURDEN_FIELDS = ["utc_timestamp", "pending", "pending_tracked", "oldest_pending_days",
                  "median_decision_days", "decisions_measured",
@@ -1151,6 +1274,7 @@ def main():
         ("Registry: engine links ratified structure, never invents it", t_registry_governance),
         ("Registry: name matching is anchored at word boundaries", t_registry_name_boundaries),
         ("Registry: aliases survive a page round trip", t_registry_alias_round_trip),
+        ("Distillation: affect and assessments of individuals are never recorded", t_distillation_no_affect),
         ("Burden: ratification queue arrival vs drain", t_ratification_burden),
         ("Protocol: cairn is a selectable model", t_protocol_discovery),
         ("Protocol: contract holds against a hostile client", t_protocol_contract),
