@@ -10,9 +10,9 @@ Model and endpoint are configured centrally in config.py (override via
 models.local.json for a different machine) -- nothing here is hardcoded.
 
 Usage:
-    py index.py                 embed all pending chunks
-    py index.py --dry-run       report pending count + time estimate, embed nothing
-    py index.py --reset         drop the vector table and re-embed everything
+    ./.venv/bin/python index.py                 embed all pending chunks
+    ./.venv/bin/python index.py --dry-run       report pending count + time estimate, embed nothing
+    ./.venv/bin/python index.py --reset         drop the vector table and re-embed everything
 
 Requires Ollama running locally with the embedding model pulled, e.g.:
     ollama pull nomic-embed-text
@@ -59,7 +59,7 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
         raise RuntimeError(
             f"embedding dimension mismatch: model returned {sorted(bad)}, "
             f"config.EMBEDDING_DIM is {config.EMBEDDING_DIM}. "
-            f"Update EMBEDDING_DIM and rebuild the index (py index.py --reset)."
+            f"Update EMBEDDING_DIM and rebuild the index (./.venv/bin/python index.py --reset)."
         )
     return vecs
 

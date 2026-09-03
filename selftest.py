@@ -14,7 +14,7 @@ governance queue costs its owner, which is the other way this product fails.
 Both report and log rather than gate, because there is no defensible threshold
 for either yet.
 
-Run:  py selftest.py
+Run:  ./.venv/bin/python selftest.py
 """
 
 import json
@@ -124,13 +124,13 @@ def t_db():
     try:
         nvec = conn.execute("SELECT COUNT(*) FROM vec_chunks").fetchone()[0]
     except Exception:
-        raise RuntimeError("vec_chunks table missing -> run: py index.py")
+        raise RuntimeError("vec_chunks table missing -> run: ./.venv/bin/python index.py")
     if nchunks == 0:
-        raise RuntimeError("no chunks -> run: py ingest.py")
+        raise RuntimeError("no chunks -> run: ./.venv/bin/python ingest.py")
     if nvec == 0:
-        raise RuntimeError("no vectors -> run: py index.py")
+        raise RuntimeError("no vectors -> run: ./.venv/bin/python index.py")
     if nvec != nchunks:
-        raise RuntimeError(f"{nchunks} chunks but {nvec} vectors -> re-run: py index.py")
+        raise RuntimeError(f"{nchunks} chunks but {nvec} vectors -> re-run: ./.venv/bin/python index.py")
     # verify the vec table dimension matches config
     ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name='vec_chunks'").fetchone()[0]
     if f"[{config.EMBEDDING_DIM}]" not in ddl:
@@ -1171,9 +1171,9 @@ def main():
 
     print("=" * 40)
     if all_ok:
-        print("ALL PASS -> the service should work. Start it: py ask.py")
+        print("ALL PASS -> the service should work. Start it: ./.venv/bin/python ask.py")
     else:
-        print("Some checks failed. Fix the FAIL above, then re-run: py selftest.py")
+        print("Some checks failed. Fix the FAIL above, then re-run: ./.venv/bin/python selftest.py")
     sys.exit(0 if all_ok else 1)
 
 

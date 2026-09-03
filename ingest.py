@@ -5,9 +5,9 @@ Fully deterministic. No model is involved at this stage. Safe to re-run: a file
 is reconverted only when its source has changed (or with --force).
 
 Usage:
-    py ingest.py              ingest everything new or changed under sources/
-    py ingest.py --force      reconvert everything, even if unchanged
-    py ingest.py --dry-run    report what would happen, convert nothing
+    ./.venv/bin/python ingest.py              ingest everything new or changed under sources/
+    ./.venv/bin/python ingest.py --force      reconvert everything, even if unchanged
+    ./.venv/bin/python ingest.py --dry-run    report what would happen, convert nothing
 """
 
 import warnings

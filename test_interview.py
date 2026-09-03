@@ -18,7 +18,7 @@ What it does, with NO manual steps and NO touching of the live engine or vault:
 All names below are INVENTED fixtures. Requires Ollama running with
 config.GEN_MODEL pulled (the answer-parsing step calls the real model).
 
-Run:  py test_interview.py [--port 8799] [--keep]
+Run:  ./.venv/bin/python test_interview.py [--port 8799] [--keep]
 """
 
 import argparse

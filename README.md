@@ -6,7 +6,7 @@ Cairn answers questions from the documents you saved, and cites a source for eve
 
 A cairn is a small stack of stones that marks a trail. Each one is built from what was already there, and it exists so the traveler can find the way. This tool works the same way: it takes what you have already collected and turns it into a marker you can navigate by.
 
-> **Status: early.** The engine works and is gated by a 20-check preflight suite. The product around it is not built yet. It has run on a small number of machines, answers currently take longer than they should, and installing it is harder than it needs to be. See the [Roadmap](ROADMAP.md) for exactly what is true today and what is next. If you want something finished, come back later. If you want to shape it, now is a good time.
+> **Status: early.** The engine works and is gated by a 25-check preflight suite. The product around it is not built yet. It has run on a small number of machines, answers currently take longer than they should, and installing it is harder than it needs to be. See the [Roadmap](ROADMAP.md) for exactly what is true today and what is next. If you want something finished, come back later. If you want to shape it, now is a good time.
 
 ---
 
@@ -69,7 +69,7 @@ cp ~/some-policies/*.pdf sources/
 ./.venv/bin/python ingest.py     # convert and chunk
 ./.venv/bin/python index.py      # embed into the local vector index
 
-# 4. Check everything is wired up (21 gates)
+# 4. Check everything is wired up (25 gates)
 ./.venv/bin/python selftest.py
 
 # 5. Ask
@@ -111,6 +111,8 @@ cairn.db     SQLite plus sqlite-vec for nearest-neighbour search
                     answer cites evidence it was never given
 127.0.0.1:8765      web interface, plus OpenAI- and Ollama-compatible protocols
 ```
+
+That is the Ask path, and it is not all of Cairn. Around it sit `watch.py`, which picks up dropped files with no command to remember; `enrich.py`, which distils meeting transcripts into drafts you review before anything is kept; `registry.py`, which holds the entity registry and the ratification queue deciding what Cairn is allowed to treat as structure; and `interview.py`, which runs onboarding as a conversation inside the Obsidian plugin in `obsidian-plugin/`.
 
 Full detail in [MAP.md](MAP.md). The reasoning behind each design choice, dated and append-only, is in [docs/DECISIONS.md](docs/DECISIONS.md).
 

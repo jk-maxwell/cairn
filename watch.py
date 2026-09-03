@@ -24,7 +24,7 @@ immediately, so anything dropped while the watcher (or Cairn generally)
 wasn't running gets picked up without a manual command.
 
 Usage:
-    py watch.py                 (run in foreground; Ctrl-C to stop)
+    ./.venv/bin/python watch.py                 (run in foreground; Ctrl-C to stop)
     nohup ./.venv/bin/python -u watch.py >> probe-watch.log 2>&1 &
 
 Every log line is prefixed CAIRN-WATCH and timestamped, so `grep CAIRN-WATCH`

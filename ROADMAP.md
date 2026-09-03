@@ -10,11 +10,11 @@ Cairn turns [Obsidian](https://obsidian.md) into a private working memory for on
 
 A ratified product thesis. Fourteen sections defining the vault as the hub, the personal and reflection content cut, five capabilities (Import, Ask, Distill, Generate, Dream), ratification as the gate into memory, and a connector layer built on a data contract rather than a code contract.
 
-A working reference implementation. The Python engine from the proof-of-concept phase: grounded retrieval with a receipt on every answer, refusal when the corpus does not contain the answer, a deterministic front door that answers without a model call, a protocol surface any OpenAI-compatible or Ollama-compatible chat client can use, and 20 gates green on two operating systems. On capable hardware a real question answers in 1.2 seconds end to end.
+A working reference implementation. The Python engine from the proof-of-concept phase: grounded retrieval with a receipt on every answer, refusal when the corpus does not contain the answer, a deterministic front door that answers without a model call, a protocol surface any OpenAI-compatible or Ollama-compatible chat client can use, and 25 gates green on two operating systems. On capable hardware a real question answers in 1.2 seconds end to end.
 
 A ratified drawing set. Twelve plates in [docs/WIREFRAMES.html](docs/WIREFRAMES.html) covering every screen, the whole-app layout, and a 24-row movement table (Plate K) that is the navigation spec, landed through four rounds of numbered review.
 
-Zero lines of plugin code. The product the thesis describes is not built. Between those two sentences sits this entire document.
+A minimal plugin, which is not the product. `obsidian-plugin/` holds about four hundred lines of TypeScript: a chat view that streams from the reference engine over its OpenAI-compatible endpoint, and the surface `/interview` and `/checkin` run inside. It exists to make the habit testable on a real vault, not to implement the drawing set — none of the twelve plates is built, and the engine is still Python running outside the vault. The product the thesis describes is not built. Between that sentence and everything above it sits this entire document.
 
 One known defect. In the reference engine's shared answer path, the retrieval-strength description is overwritten before the receipt is assembled, truncating the strength line on clean answers and doubling the warning on flagged ones. It matters more now than when it was found, for a reason named in Horizon 1.
 
@@ -101,7 +101,7 @@ Two risks are held by ordering rather than by gates: injection defense lands bef
 
 **Graduation.** Action classes earning promotion from asked-every-time to journaled, on the evidence of the accumulated journal. Designed future state, deliberately after the journal has months of record to design from.
 
-**Publishing.** Making the repository public is a one-way door and is not scheduled by any horizon. The integrity work of Horizon 3 is its precondition, not its trigger, and the sensitive-term scan runs before any push regardless.
+**Publishing.** Making the repository public is a one-way door and is not scheduled by any horizon. The integrity work of Horizon 3 is its precondition, not its trigger, and the sensitive-term scan runs before any push regardless. *Superseded 2026-09-02:* the repository was published ahead of that precondition on the owner's explicit ruling. The scan did run, and the one leak it found was removed from history before any remote existed. See the 2026-09-02 entry in [docs/DECISIONS.md](docs/DECISIONS.md) for what was traded away.
 
 **The promises are not on this roadmap** because they are not work items. Nothing leaves the machine; it ingests only what you point it at; it never speaks for you. They hold at every horizon, and any work item that would bend one is out of scope by construction.
 

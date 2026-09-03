@@ -56,9 +56,30 @@ On the protocol faces, the client's system prompt, sampling settings, and model 
 | `ask.py` | Retrieval, grounded synthesis, citations, strength label, streaming web interface, local-model protocol surface (OpenAI and Ollama shapes), interview routing (/interview, /checkin), one-shot command line |
 | `interview.py` | The interview engine: onboarding (/interview) and status check-in (/checkin) run in the plugin chat; flow state reconstructed from the message history via invisible markers; the model only parses answers; confirmation of the playback is the ratification and the only write path |
 | `test_interview.py` | Scripted end-to-end test of the interview engine on a scratch port with a temp DB and temp vault: full canned onboarding, seeded check-in, cancel, and normal-question routing |
-| `selftest.py` | Preflights the whole pipeline against real models. Twenty-three gates covering dependencies, retrieval, grounding, citation integrity, the front door, the registry/governance contract, the protocol surface, a frozen-prompt speed benchmark, and the ratification-burden reading |
-| `tools/mapcheck.py` | Fails if any tracked code file is missing from this map, if this map names models the tracked code does not declare, or if `ask.py` carries model names of its own instead of re-exporting `config`. Reads the models `config.py` declares at module level, not the resolved values, so a gitignored `models.local.json` override cannot fail a gate about a tracked document; an active override is reported as information |
-| `tools/test_registry.py` | Registry/governance acceptance CLI: thirteen cases against a temp vault and temp DB with the model stubbed -- match never inserts, proposals dedupe and respect rejection, checkbox ratifies, deleted line rejects forever, re-enrichment is idempotent, rollups touch only the marked block, migrate converts a pre-governance database |
+| `selftest.py` | Preflights the whole pipeline against real models. Twenty-five gates covering dependencies, retrieval, grounding, citation integrity, the front door, the registry/governance contract, the protocol surface, a frozen-prompt speed benchmark, and the ratification-burden reading |
+| `tools/mapcheck.py` | Fails if any tracked Python file is missing from this map, if this map names models the tracked code does not declare, or if `ask.py` carries model names of its own instead of re-exporting `config`. Reads the models `config.py` declares at module level, not the resolved values, so a gitignored `models.local.json` override cannot fail a gate about a tracked document; an active override is reported as information |
+| `tools/test_registry.py` | Registry/governance acceptance CLI: fourteen cases against a temp vault and temp DB with the model stubbed -- match never inserts, proposals dedupe and respect rejection, checkbox ratifies, deleted line rejects forever, re-enrichment is idempotent, rollups touch only the marked block, migrate converts a pre-governance database |
+
+### The Obsidian plugin
+
+The second codebase. Roughly four hundred lines of TypeScript in `obsidian-plugin/`,
+built with esbuild. It is the only part of Cairn the user actually looks at; everything
+above is a service it talks to over HTTP.
+
+| Path | Purpose |
+| --- | --- |
+| `obsidian-plugin/src/main.ts` | Entry point: registers the chat view, the ribbon icon, and the settings tab |
+| `obsidian-plugin/src/view.ts` | The chat surface. Sends the conversation to `<base>/v1/chat/completions` and renders the streamed reply as markdown. It sends the whole visible history, which is what lets `interview.py` reconstruct its flow state from the transcript instead of holding a session |
+| `obsidian-plugin/src/sseParser.ts` | Incremental parser for the OpenAI-compatible SSE stream. Deliberately free of any Obsidian or DOM dependency so it can be exercised under plain Node |
+| `obsidian-plugin/src/settings.ts` | One setting, the engine base URL, defaulting to `http://127.0.0.1:8765` |
+| `obsidian-plugin/scripts/smoke.mjs` | Node smoke test for the parser, transpiling `sseParser.ts` in memory so it tests the shipped source rather than a copy of its logic |
+| `obsidian-plugin/main.js` | The esbuild bundle, committed on purpose: Obsidian loads this file directly, and a plugin that has to be built before it can be installed is a plugin most people will not install |
+| `obsidian-plugin/manifest.json`, `package.json`, `tsconfig.json`, `esbuild.config.mjs` | Plugin metadata and the build |
+
+`tools/mapcheck.py` reads tracked Python only, so nothing enforces this section. It is
+kept by hand until that gate learns to read TypeScript, and that is a real gap rather
+than a decision.
+
 
 ### Generated locally, never committed
 

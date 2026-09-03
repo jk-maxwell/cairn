@@ -32,10 +32,10 @@ burden_stats() below for what those numbers mean and why the entities table
 cannot answer the question on its own.
 
 CLI:
-    py registry.py --scan       resync the DB index from the vault pages
-    py registry.py --queue      apply queue edits, then rewrite the queue note
-    py registry.py --burden     print the ratification-burden numbers
-    py registry.py --migrate    one-time conversion of a pre-governance DB:
+    ./.venv/bin/python registry.py --scan       resync the DB index from the vault pages
+    ./.venv/bin/python registry.py --queue      apply queue edits, then rewrite the queue note
+    ./.venv/bin/python registry.py --burden     print the ratification-burden numbers
+    ./.venv/bin/python registry.py --migrate    one-time conversion of a pre-governance DB:
                                 every existing entity becomes a proposal, the
                                 generated Cairn/People and Cairn/Projects
                                 pages are deleted, and the initial

@@ -23,8 +23,8 @@ client-supplied system prompt, sampling settings, or model choice. The chrome is
 swappable; the contract is not. See the PROTOCOL section below.
 
 Usage:
-    py ask.py                       start the service at http://127.0.0.1:8765
-    py ask.py --ask "your question" one-shot from the command line, no server
+    ./.venv/bin/python ask.py                       start the service at http://127.0.0.1:8765
+    ./.venv/bin/python ask.py --ask "your question" one-shot from the command line, no server
 
 Requires the configured generation and embedding endpoints reachable (see
 config.py / models.local.json for the machine-local model names, dialects, and

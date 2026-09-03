@@ -1,5 +1,12 @@
 # Cairn — macOS smoke test report
 
+> **What this is.** A point-in-time clean-room install report from 2026-08-12, kept for
+> methodology rather than currency. It records what a stranger's first install actually hit,
+> which is worth more than a claim that installing works. Most findings below have since been
+> fixed. Two things date it: the gate count was 20 at the time and is 25 now, and the
+> `py`-launcher recovery messages it flagged were only fixed on 2026-09-02. Paths appear as
+> `<repo>` and `<smoke-dir>` because the machine's own path was scrubbed from this file.
+
 Date: 2026-08-12
 Host: macOS, Apple Silicon, Python 3.12.12, Ollama 0.32.9
 Source under test: `<repo>` @ commit `4ada514` ("Initial commit: Cairn as an open source product")

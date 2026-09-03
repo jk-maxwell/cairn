@@ -19,11 +19,13 @@ If you find yourself writing "this obviously works," that is the moment to write
 ## Running the checks
 
 ```bash
-python selftest.py        # 21 gates: dependencies, retrieval, grounding, registry, protocol, speed
-python tools/mapcheck.py  # every code file must be documented in MAP.md
+./.venv/bin/python selftest.py           # 25 gates: dependencies, retrieval, grounding, registry, protocol, speed
+./.venv/bin/python tools/mapcheck.py     # every tracked Python file must be documented in MAP.md
+./.venv/bin/python test_interview.py     # onboarding end to end: canned interview, seeded check-in, cancel
+./.venv/bin/python tools/test_registry.py  # the registry's name-matching and ratification cases
 ```
 
-Both must be green. `selftest.py` needs Ollama running with the models pulled, because several gates put a real question to a real model. Splitting the offline gates out so they can run in continuous integration is [Horizon 2](ROADMAP.md) work and would be a genuinely useful contribution.
+All four must be green. `selftest.py` needs Ollama running with the models pulled, because several gates put a real question to a real model. Splitting the offline gates out so they can run in continuous integration is [Horizon 2](ROADMAP.md) work and would be a genuinely useful contribution.
 
 ## The constraints that are not up for negotiation
 

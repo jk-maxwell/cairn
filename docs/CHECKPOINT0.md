@@ -1,5 +1,11 @@
 # Checkpoint 0 Execution Checklist: the probe
 
+> **What this is.** The literal execution checklist used to run Cairn's first test against a
+> real vault, written to be handed to an agent task by task. It is published for methodology
+> transparency, not as user documentation — if you are trying to install Cairn, you want
+> [README.md](../README.md) instead. It refers to local-only files that are not in this
+> repository, and its gate count (20) predates the current 25.
+
 **Draft 2. Numbered for markup.**
 
 *Changed from draft 1: the repository's `.gitignore` was repaired before execution (inline `#` comments had silently disabled the `sources/`, `vault/`, `*.db`, `benchmarks.csv`, and `gates.txt` patterns — git treats `#` as a comment only at the start of a line) and `*.local.json` was widened to `*.local.*` so P0-9's note is actually covered. P0-6's append was fixed to put its comment on its own line for the same reason.*

@@ -1,5 +1,13 @@
 # Proposed DECISIONS entries — 2026-08-29
 
+> **What this is.** A live review queue, not documentation, and it is addressed throughout to
+> Cairn's owner in the second person because that is who works it. Nothing in it is in force:
+> the ratified record is [DECISIONS.md](DECISIONS.md), and an entry only becomes real by being
+> appended there verbatim. It is published because the reasoning in a rejected or pending
+> proposal is worth as much as the reasoning in an accepted one, and because the evidence
+> appendix at the foot is honest about which claims were never verified. This file is deleted
+> when its last entry is ruled on.
+
 *Proposals, not records. Nothing here is in force. Mark up the wording; on your
 ratification each accepted entry is appended verbatim to `docs/DECISIONS.md` and
 this file is deleted. The ratified document is never edited silently.*
