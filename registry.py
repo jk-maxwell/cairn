@@ -14,8 +14,12 @@ Implements the three 2026-08-22 decisions (docs/DECISIONS.md):
     those pages by scan_vault(); editing a page IS editing the structure.
   - The governance queue is a checkbox note, Inbox/Governance.md: checking
     a line ratifies, deleting a line rejects, and the watcher acts on the
-    edit. Rejections persist (status='rejected') so a name is never
-    re-proposed.
+    edit. Rejections persist (status='rejected') AND get a durable vault
+    representation: a "## Declined" section in the same note, written by
+    reject() the same way ratify() writes a page. scan_vault() reads that
+    section back and reconciles the database against it in both directions,
+    so a dropped-and-rebuilt cairn.db still refuses a rejected name, and
+    deleting its line un-rejects it (docs/BETA.md Phase 1 item 3).
 
 Page ownership contract: the body of a ratified entity page is the user's
 and is never rewritten. Machine contributions live only in front matter the
@@ -429,6 +433,9 @@ def ensure_entity_columns(conn) -> None:
         conn.execute("ALTER TABLE entities ADD COLUMN origin TEXT")
         conn.execute("UPDATE entities SET origin='extraction' WHERE origin IS NULL")
         _log("migration: entities.origin added (existing rows -> 'extraction')")
+    if "rollup_seeded" not in cols:
+        conn.execute("ALTER TABLE entities ADD COLUMN rollup_seeded INTEGER NOT NULL DEFAULT 0")
+        _log("migration: entities.rollup_seeded added (existing rows -> 0)")
     conn.commit()
 
 
@@ -572,9 +579,14 @@ def ratify(conn, entity_id: str, vault_dir) -> str:
     return str(page)
 
 
-def reject(conn, entity_id: str) -> None:
-    """Flip to 'rejected'. The row is kept forever so propose() never raises
-    the same name again."""
+def reject(conn, entity_id: str, vault_dir) -> None:
+    """Flip to 'rejected' and write the name into the governance note's
+    Declined section -- a durable vault representation, written immediately,
+    the same way ratify() writes a page immediately. This is what makes the
+    rejection survive a dropped-and-rebuilt cairn.db: scan_vault() reads the
+    Declined section back and restores the row (see there). The DB row is
+    also kept so propose() refuses the name again within this same process
+    without waiting for a rescan."""
     row = conn.execute(
         "SELECT name, type, origin FROM entities WHERE entity_id=?", (entity_id,)
     ).fetchone()
@@ -583,6 +595,7 @@ def reject(conn, entity_id: str) -> None:
     if row:
         _log(f"rejected {row[1]} {row[0]!r}")
         _log_event("rejected", entity_id, row[1], row[2])
+        write_queue_note(conn, vault_dir)
 
 
 # ---- vault scan: the vault is authoritative ---------------------------------
@@ -617,13 +630,20 @@ def _registry_pages(vault_dir: Path):
 
 
 def scan_vault(conn, vault_dir) -> dict:
-    """Rebuild the ratified rows of the entities table from the vault pages.
-    The vault is authoritative: a page is a ratified entity, an edited alias
-    list wins over whatever the DB held, and a ratified row whose page is
-    gone is dropped. Proposed and rejected rows (which have no pages) are
-    never touched. Returns summary counts."""
+    """Rebuild the ratified rows of the entities table from the vault pages,
+    then reconcile rejected rows against the governance note's Declined
+    section. The vault is authoritative for both: a page is a ratified
+    entity, an edited alias list wins over whatever the DB held, and a
+    ratified row whose page is gone is dropped; a name listed in Declined is
+    rejected even if the database never heard of it (a dropped-and-rebuilt
+    cairn.db, or a line the user typed by hand), and a rejected row no longer
+    listed there is un-rejected -- deleted outright, so propose() accepts the
+    name again, symmetric with how deleting a Pending line rejects it today.
+    Proposed rows (which have no page and are not yet a governance verdict)
+    are never touched. Returns summary counts."""
     vault_dir = Path(vault_dir)
-    counts = {"pages": 0, "added": 0, "updated": 0, "unchanged": 0, "removed": 0}
+    counts = {"pages": 0, "added": 0, "updated": 0, "unchanged": 0, "removed": 0,
+              "declined_restored": 0, "declined_cleared": 0}
     seen_ids: set[str] = set()
 
     for page, etype, name, aliases in _registry_pages(vault_dir):
@@ -688,9 +708,58 @@ def scan_vault(conn, vault_dir) -> dict:
             counts["removed"] += 1
             _log(f"scan removed {etype} {name!r} (page deleted from vault)")
 
+    # Declined section reconciliation (rejection permanence, docs/BETA.md
+    # Phase 1 item 3). reject() writes this section immediately, but the
+    # section is what a dropped-and-rebuilt cairn.db has to go on, so it is
+    # read back here rather than trusted to already be reflected in the DB.
+    note = vault_dir / QUEUE_NOTE
+    declined = (_parse_declined(note.read_text(encoding="utf-8", errors="replace"))
+                if note.exists() else [])
+    declined_keys = {(name.lower(), etype) for name, etype in declined}
+
+    for name, etype in declined:
+        entity_id = _sha1(f"{etype}:{name.lower()}")[:16]
+        row = conn.execute(
+            "SELECT status, origin FROM entities WHERE entity_id=?", (entity_id,)
+        ).fetchone()
+        if row is None:
+            # No row at all: either a fresh/rebuilt database, or the user
+            # hand-added a name to Declined to pre-block it. Either way the
+            # vault already recorded this decision, so it is restored, not
+            # logged as a new event -- logging it would double-count a
+            # decision that already happened once in governance.csv.
+            conn.execute(
+                "INSERT INTO entities (entity_id, name, type, aliases, note_path, status, origin) "
+                "VALUES (?,?,?,?,NULL,'rejected',NULL)",
+                (entity_id, name, etype, "[]"),
+            )
+            counts["declined_restored"] += 1
+            _log(f"scan restored rejection {etype} {name!r} from Declined section")
+        elif row[0] == "proposed":
+            # Drained by editing the vault directly rather than by deleting
+            # the Pending line -- a real decision, so (like the analogous
+            # direct-page-write path above) it is logged as one.
+            conn.execute("UPDATE entities SET status='rejected' WHERE entity_id=?", (entity_id,))
+            counts["declined_restored"] += 1
+            _log(f"scan rejected {etype} {name!r} (declined directly in the vault)")
+            _log_event("rejected", entity_id, etype, row[1])
+        # row[0] == 'rejected': already reconciled, nothing to do.
+        # row[0] == 'ratified': a page exists and wins; a stale Declined line
+        # naming the same identity is left alone rather than un-ratifying it.
+
+    for eid, name, etype in conn.execute(
+        "SELECT entity_id, name, type FROM entities WHERE status='rejected'"
+    ).fetchall():
+        if (name.lower(), etype) not in declined_keys:
+            conn.execute("DELETE FROM entities WHERE entity_id=?", (eid,))
+            counts["declined_cleared"] += 1
+            _log(f"scan un-rejected {etype} {name!r} (line removed from Declined section)")
+
     conn.commit()
     _log(f"scan_vault pages={counts['pages']} added={counts['added']} "
-         f"updated={counts['updated']} removed={counts['removed']}")
+         f"updated={counts['updated']} removed={counts['removed']} "
+         f"declined_restored={counts['declined_restored']} "
+         f"declined_cleared={counts['declined_cleared']}")
     return counts
 
 
@@ -717,22 +786,65 @@ def _rollup_body(conn, entity_id: str) -> str:
     return "\n".join(lines)
 
 
-def _replace_marked_block(text: str, inner: str) -> str:
-    """Replace ONLY the content between the cairn markers. If the markers are
-    missing (the user removed them), append a fresh marked block at the end --
-    never touch anything the user wrote."""
+def _marked_block(inner: str) -> str:
+    return f"{MARK_BEGIN}\n{inner}\n{MARK_END}"
+
+
+def _append_marked_block(text: str, inner: str) -> str:
+    return text.rstrip("\n") + "\n\n" + _marked_block(inner) + "\n"
+
+
+def _replace_marked_block(text: str, inner: str) -> str | None:
+    """Replace ONLY the content between the cairn markers, and return the new
+    text. If the markers are missing, return None rather than guessing --
+    the caller (_regenerate_rollup_for) is the one that knows whether this
+    page has ever had a marked block before, which is the only way to tell
+    "the user deleted it" from "it never had one", and it is not this
+    function's job to guess. Never touches anything the user wrote outside
+    the markers."""
     begin, end = text.find(MARK_BEGIN), text.find(MARK_END)
-    block = f"{MARK_BEGIN}\n{inner}\n{MARK_END}"
     if begin != -1 and end != -1 and end > begin:
-        return text[:begin] + block + text[end + len(MARK_END):]
-    return text.rstrip("\n") + "\n\n" + block + "\n"
+        return text[:begin] + _marked_block(inner) + text[end + len(MARK_END):]
+    return None
 
 
 def _regenerate_rollup_for(conn, entity_id: str, page: Path) -> bool:
+    """Rewrite the marked block on one page -- unless the user deleted it.
+
+    A missing pair of markers is ambiguous on its own: it means either "this
+    page has never had a rollup" (write one) or "the owner deleted the block
+    on purpose" (leave it deleted -- daily use is exactly when someone starts
+    editing their own pages, and silently restoring what they removed is a
+    week-one trust failure; docs/BETA.md Phase 1 item 3). The two are told
+    apart by entities.rollup_seeded, set the first time this function (or
+    ratify(), which calls it) ever writes a block for this entity_id: once
+    set, an absent marker means deletion, not absence. This bit is DB-scoped,
+    not vault-durable like the Declined-section fix above -- a dropped and
+    rebuilt cairn.db forgets a deletion and the block is written once more on
+    the next enrichment after such a rebuild, which is a real but narrower
+    gap than rejection permanence and is left as a known trade-off rather
+    than fixed here."""
     if not page.exists():
         return False
     old = page.read_text(encoding="utf-8", errors="replace")
-    new = _replace_marked_block(old, _rollup_body(conn, entity_id))
+    seeded = conn.execute(
+        "SELECT rollup_seeded FROM entities WHERE entity_id=?", (entity_id,)
+    ).fetchone()
+    seeded = bool(seeded and seeded[0])
+
+    body = _rollup_body(conn, entity_id)
+    new = _replace_marked_block(old, body)
+    if new is None:
+        if seeded:
+            return False  # markers gone and we've written here before: the user deleted it
+        # First time this entity has ever gotten a block: write it, and
+        # remember that so a later deletion is honoured instead of undone.
+        new = _append_marked_block(old, body)
+
+    if not seeded:
+        conn.execute("UPDATE entities SET rollup_seeded=1 WHERE entity_id=?", (entity_id,))
+        conn.commit()
+
     if new != old:
         page.write_text(new, encoding="utf-8")
         return True
@@ -758,7 +870,21 @@ def regenerate_rollups(conn, vault_dir) -> int:
 
 _QUEUE_LINE_RE = re.compile(r"^\s*-\s*\[( |x|X)\]\s*\*\*(.+?)\*\*")
 _QUEUE_SECTION_RE = re.compile(r"^###\s+Proposed\s+(projects|people)\s*$")
+# Plural-heading -> type-token map for the Pending section. This is the
+# "queue parser" hardcoded site named in docs/BETA.md Phase 2 item 2 (the
+# other two are the FOLDERS map above and the vault-scan folder walk):
+# entity types must become data in all three before a new type is one edit.
 _SECTION_TYPE = {"projects": "project", "people": "person"}
+
+# The Declined section uses the singular type token directly ("(project)"),
+# not an English plural heading, so it is read straight off FOLDERS rather
+# than needing its own copy of _SECTION_TYPE -- one fewer place Phase 2 has
+# to touch, not a fourth hardcoded site. Non-greedy name capture anchored at
+# end-of-line: a name that itself contains " (project)" as a substring still
+# round-trips, because only the LAST such occurrence can make the whole
+# pattern match to the end of the string.
+_DECLINED_LINE_RE = re.compile(
+    r"^-\s+(.+?)\s+\((" + "|".join(re.escape(t) for t in FOLDERS) + r")\)\s*$")
 
 
 def _proposed(conn):
@@ -768,10 +894,44 @@ def _proposed(conn):
     ).fetchall()
 
 
+def _rejected(conn):
+    return conn.execute(
+        "SELECT entity_id, name, type FROM entities WHERE status='rejected' "
+        "ORDER BY type, name COLLATE NOCASE"
+    ).fetchall()
+
+
+def _parse_declined(content: str) -> list[tuple[str, str]]:
+    """Read the '## Declined' section of the governance note back into
+    (name, type) pairs, ignoring every other section. The vault is
+    authoritative, so scan_vault() diffs this list against the database's
+    rejected rows in both directions: restore a name found here but not in
+    the DB, un-reject a DB row no longer found here."""
+    out = []
+    in_section = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_section = (stripped == "## Declined")
+            continue
+        if not in_section:
+            continue
+        m = _DECLINED_LINE_RE.match(line)
+        if m:
+            out.append((m.group(1).strip(), m.group(2)))
+    return out
+
+
 def write_queue_note(conn, vault_dir) -> None:
-    """Regenerate Inbox/Governance.md from all status='proposed' entities,
-    and record (in meta) exactly which names were published so a later
-    apply_queue_edits() can tell a user deletion from a never-published row."""
+    """Regenerate Inbox/Governance.md: a Pending section from all
+    status='proposed' entities, and a Declined section from all
+    status='rejected' entities -- the durable vault representation of a
+    rejection (docs/BETA.md Phase 1 item 3). Records (in meta) exactly which
+    Pending names were published so a later apply_queue_edits() can tell a
+    user deletion from a never-published row; the Declined section needs no
+    such bookkeeping, because every line in it was written by this function
+    or reject() and scan_vault() reconciles it against the database directly
+    on every scan."""
     import db as dbmod
 
     vault_dir = Path(vault_dir)
@@ -782,7 +942,7 @@ def write_queue_note(conn, vault_dir) -> None:
             by_type[etype].append((eid, name))
 
     lines = [
-        "## Governance queue",
+        "## Pending",
         "*Check a box to ratify. Delete a line to reject.*",
         "",
     ]
@@ -796,6 +956,17 @@ def write_queue_note(conn, vault_dir) -> None:
                 seen = ", ".join(f"[[{t}]]" for t in titles[:3])
                 lines.append(f"- [ ] **{name}**" + (f" — seen in {seen}" if seen else ""))
         lines.append("")
+
+    declined = _rejected(conn)
+    lines.append("## Declined")
+    lines.append("*Deleting a line here lets the name be proposed again.*")
+    lines.append("")
+    if not declined:
+        lines.append("*(nothing declined)*")
+    else:
+        for _eid, name, etype in declined:
+            lines.append(f"- {name}  ({etype})")
+    lines.append("")
 
     content = "\n".join(lines).rstrip() + "\n"
     note = vault_dir / QUEUE_NOTE
@@ -895,7 +1066,7 @@ def apply_queue_edits(conn, vault_dir) -> dict:
                 continue  # renamed in place, handled (or left pending) above
             row = _find_proposed(etype, name)
             if row:
-                reject(conn, row[0])
+                reject(conn, row[0], vault_dir)
                 result["rejected"].append(row[1])
 
     if result["ratified"] or result["rejected"]:

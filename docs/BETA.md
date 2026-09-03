@@ -65,10 +65,14 @@ packaging polish beyond what the second machine actually needs.
    triggers read. The drop-and-rebuild was never actually executed, so this is
    confirmed first and fixed second; if the rebuild turns out to preserve
    rejections, the finding is retracted rather than patched around.
-   *Rollup writes to the body*: `registry.py` promises the ratified page body
-   is never rewritten and that machine contributions live in front matter
-   alone, but `_rollup_body` writes a `## Meetings` section into the body and
-   `_replace_marked_block` re-appends it after the owner deletes the markers.
+   *A deleted rollup block did not stay deleted*: the second defect was
+   narrower than first filed and one half of it was not real. `registry.py`'s
+   ownership contract does not say machine contributions live in front matter
+   alone -- that was a paraphrase -- it explicitly carves out "the single block
+   between the cairn markers", so `_rollup_body` writing into the body is
+   sanctioned, not a contradiction. What was real is worse: the block was
+   re-appended after the owner deleted the markers, so deleting the machine's
+   section from your own page did not stick.
    Daily use is precisely when the owner starts editing their own pages, so a
    machine that overwrites them is a trust failure in week one, not a latent
    bug. Both land before checkpoint 1, because the interview itself proposes,

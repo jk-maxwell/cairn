@@ -671,6 +671,185 @@ def t_registry_alias_round_trip():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def t_registry_rejection_permanence():
+    """
+    Rejection permanence (docs/BETA.md Phase 1 item 3, part 1). Confirmed
+    defect: reject() used to write only 'UPDATE entities SET status=rejected'
+    -- a rejected entity has no vault page by definition, so dropping
+    cairn.db and rebuilding via scan_vault() resurrected every rejection ever
+    made, contradicting RATIONALE.md 8.4's "drop every derived store,
+    rebuild from the vault alone, get the same answers."
+
+    The fix gives rejection a durable vault representation: reject() writes
+    the name into a '## Declined' section of Inbox/Governance.md the moment
+    it rejects, the same way ratify() writes a page the moment it ratifies.
+    This gate proves the rejection survives a real drop-and-rebuild -- a
+    brand new sqlite connection against a brand new schema, pointed at the
+    same vault -- and that an awkward name (comma, colon) round-trips through
+    that plain-markdown section exactly, the same property
+    t_registry_alias_round_trip proves for YAML front matter.
+    """
+    import shutil
+    import sqlite3
+    import tempfile
+    import registry
+
+    tmp = Path(tempfile.mkdtemp(prefix="cairn-selftest-rejection-"))
+    real_log = registry.GOVERNANCE_LOG
+    registry.GOVERNANCE_LOG = tmp / "governance.csv"
+    try:
+        conn = sqlite3.connect(tmp / "t.db")
+        conn.execute("PRAGMA foreign_keys = ON")
+        dbmod.init_db(conn)
+        vault = tmp / "vault"
+        vault.mkdir(parents=True)
+
+        awkward = "Nightjar, Delta: Revamp"
+        if not registry.propose(conn, awkward, "project", None):
+            raise RuntimeError("propose() refused the fixture name")
+        eid = conn.execute("SELECT entity_id FROM entities WHERE name=?", (awkward,)).fetchone()[0]
+        registry.reject(conn, eid, vault)
+
+        note = vault / "Inbox" / "Governance.md"
+        text = note.read_text(encoding="utf-8")
+        if "## Declined" not in text:
+            raise RuntimeError(f"reject() did not write a Declined section:\n{text}")
+        if f"- {awkward}  (project)" not in text:
+            raise RuntimeError(f"declined name did not round-trip verbatim into the note:\n{text}")
+        conn.close()
+
+        # Drop the database -- a fresh connection, fresh schema, same vault --
+        # and rebuild the ratified index from the vault alone.
+        conn2 = sqlite3.connect(tmp / "t2.db")
+        conn2.execute("PRAGMA foreign_keys = ON")
+        dbmod.init_db(conn2)
+        registry.scan_vault(conn2, vault)
+
+        row = conn2.execute("SELECT status FROM entities WHERE name=?", (awkward,)).fetchone()
+        if row is None or row[0] != "rejected":
+            raise RuntimeError(f"rejection did not survive a dropped-and-rebuilt DB: {row}")
+        if registry.propose(conn2, awkward, "project", None):
+            raise RuntimeError("propose() re-proposed a name rejected before the DB was dropped")
+        conn2.close()
+        return "rejection (awkward name) survives dropping cairn.db and rebuilding from the vault alone"
+    finally:
+        registry.GOVERNANCE_LOG = real_log
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def t_registry_undecline():
+    """
+    Un-declining, the mirror of rejection permanence: deleting a line from
+    the Declined section must make the name proposable again, symmetric with
+    how deleting a Pending line rejects it today. scan_vault() must delete
+    the row outright rather than flip it to some third status, because
+    propose() and match() key off row presence (any existing row blocks a
+    re-proposal, whatever its status), not a tri-state flag.
+    """
+    import shutil
+    import sqlite3
+    import tempfile
+    import registry
+
+    tmp = Path(tempfile.mkdtemp(prefix="cairn-selftest-undecline-"))
+    real_log = registry.GOVERNANCE_LOG
+    registry.GOVERNANCE_LOG = tmp / "governance.csv"
+    try:
+        conn = sqlite3.connect(tmp / "t.db")
+        conn.execute("PRAGMA foreign_keys = ON")
+        dbmod.init_db(conn)
+        vault = tmp / "vault"
+        vault.mkdir(parents=True)
+
+        registry.propose(conn, "Ember Outreach", "project", None)
+        eid = conn.execute("SELECT entity_id FROM entities WHERE name='Ember Outreach'").fetchone()[0]
+        registry.reject(conn, eid, vault)
+        if registry.propose(conn, "Ember Outreach", "project", None):
+            raise RuntimeError("a freshly rejected name was re-proposable before any un-decline")
+
+        note = vault / "Inbox" / "Governance.md"
+        kept = [l for l in note.read_text(encoding="utf-8").splitlines()
+                if "Ember Outreach" not in l]
+        note.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+        registry.scan_vault(conn, vault)
+        row = conn.execute("SELECT 1 FROM entities WHERE name='Ember Outreach'").fetchone()
+        if row is not None:
+            raise RuntimeError("un-declined name still has a row after scan_vault")
+        if not registry.propose(conn, "Ember Outreach", "project", None):
+            raise RuntimeError("un-declined name is still refused by propose()")
+        conn.close()
+        return "removing a Declined line un-rejects the name on the next scan"
+    finally:
+        registry.GOVERNANCE_LOG = real_log
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def t_registry_rollup_deletion_sticks():
+    """
+    Page ownership contract, defect 2 (docs/BETA.md Phase 1 item 3, part 2).
+    _replace_marked_block used to re-append the machine's rollup block
+    whenever the markers were absent, with no way to tell "the owner deleted
+    this block on purpose" from "this page has never had one" -- a machine
+    that silently restores what its owner just deleted from their own page is
+    a week-one trust failure, and daily use is exactly when someone starts
+    editing their own pages.
+
+    The fix: entities.rollup_seeded records whether a block has ever been
+    written for this entity_id. Absent markers + seeded means deletion
+    (leave it deleted); absent markers + never seeded means "first time"
+    (write one, and remember that). This gate proves both halves, because a
+    fix that only handled one would just move the bug: a page that never had
+    a rollup must still get one.
+    """
+    import shutil
+    import sqlite3
+    import tempfile
+    import registry
+
+    tmp = Path(tempfile.mkdtemp(prefix="cairn-selftest-rollup-"))
+    real_log = registry.GOVERNANCE_LOG
+    registry.GOVERNANCE_LOG = tmp / "governance.csv"
+    try:
+        conn = sqlite3.connect(tmp / "t.db")
+        conn.execute("PRAGMA foreign_keys = ON")
+        dbmod.init_db(conn)
+        vault = tmp / "vault"
+        vault.mkdir(parents=True)
+
+        registry.propose(conn, "Wharfstone Survey", "project", None)
+        eid = conn.execute("SELECT entity_id FROM entities WHERE name='Wharfstone Survey'").fetchone()[0]
+        page = Path(registry.ratify(conn, eid, vault))
+        if registry.MARK_BEGIN not in page.read_text(encoding="utf-8"):
+            raise RuntimeError("ratify() did not seed a marked block")
+
+        deleted = page.read_text(encoding="utf-8").split(registry.MARK_BEGIN)[0].rstrip() + "\n"
+        page.write_text(deleted, encoding="utf-8")
+
+        registry.regenerate_rollups(conn, vault)  # the "subsequent enrichment"
+        after = page.read_text(encoding="utf-8")
+        if registry.MARK_BEGIN in after:
+            raise RuntimeError(f"deleted rollup block was silently re-appended:\n{after}")
+
+        # A page that never had one still gets a first block.
+        fresh = vault / "Projects" / "Cinder Route.md"
+        fresh.write_text("---\ncairn-type: project\naliases: []\n---\n\nUser's own notes.\n",
+                         encoding="utf-8")
+        registry.scan_vault(conn, vault)
+        registry.regenerate_rollups(conn, vault)
+        fresh_text = fresh.read_text(encoding="utf-8")
+        if registry.MARK_BEGIN not in fresh_text:
+            raise RuntimeError("a page that never had a rollup did not get one on its first scan")
+        if "User's own notes." not in fresh_text:
+            raise RuntimeError("user body was not preserved when the first block was written")
+
+        conn.close()
+        return "a user-deleted rollup block stays deleted; a never-seeded page still gets one"
+    finally:
+        registry.GOVERNANCE_LOG = real_log
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def t_distillation_no_affect():
     """
     Distillation never records affect, tone, or assessments of individuals
@@ -1274,6 +1453,9 @@ def main():
         ("Registry: engine links ratified structure, never invents it", t_registry_governance),
         ("Registry: name matching is anchored at word boundaries", t_registry_name_boundaries),
         ("Registry: aliases survive a page round trip", t_registry_alias_round_trip),
+        ("Registry: rejection survives a dropped-and-rebuilt database", t_registry_rejection_permanence),
+        ("Registry: removing a Declined line un-rejects the name", t_registry_undecline),
+        ("Registry: a user-deleted rollup block stays deleted", t_registry_rollup_deletion_sticks),
         ("Distillation: affect and assessments of individuals are never recorded", t_distillation_no_affect),
         ("Burden: ratification queue arrival vs drain", t_ratification_burden),
         ("Protocol: cairn is a selectable model", t_protocol_discovery),

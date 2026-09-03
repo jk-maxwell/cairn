@@ -19,7 +19,7 @@ If you find yourself writing "this obviously works," that is the moment to write
 ## Running the checks
 
 ```bash
-./.venv/bin/python selftest.py           # 26 gates: dependencies, retrieval, grounding, registry, distillation, protocol, speed
+./.venv/bin/python selftest.py           # 29 gates: dependencies, retrieval, grounding, registry, distillation, protocol, speed
 ./.venv/bin/python tools/mapcheck.py     # every tracked Python file must be documented in MAP.md
 ./.venv/bin/python test_interview.py     # onboarding end to end: canned interview, seeded check-in, cancel
 ./.venv/bin/python tools/test_registry.py  # the registry's name-matching and ratification cases

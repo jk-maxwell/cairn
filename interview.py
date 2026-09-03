@@ -714,7 +714,7 @@ def commit_checkin(conn, data: dict, vault_dir) -> list[str]:
             touched.append(page)
             log.info("interview[ci]: ratified proposal %r -> %s", v["name"], page)
         else:
-            registry.reject(conn, eid)
+            registry.reject(conn, eid, vault_dir)
             log.info("interview[ci]: rejected proposal %r", v["name"])
     for p in data.get("new_projects", []):
         page = _ratify_new(conn, p["name"], "project", p.get("aliases", []), vault_dir)

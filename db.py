@@ -53,13 +53,22 @@ CREATE TABLE IF NOT EXISTS meta (
 -- row (registry.propose) awaiting the governance queue, and a rejected
 -- proposal is kept as status='rejected' so it is never re-proposed.
 CREATE TABLE IF NOT EXISTS entities (
-    entity_id  TEXT PRIMARY KEY,
-    name       TEXT NOT NULL,       -- canonical name (page name for ratified rows)
-    type       TEXT NOT NULL,       -- person | project
-    aliases    TEXT DEFAULT '[]',   -- JSON array of alternate names (from page front matter)
-    note_path  TEXT,                -- vault path to the ratified entity page (NULL until ratified)
-    status     TEXT NOT NULL DEFAULT 'ratified',  -- ratified | proposed | rejected
-    origin     TEXT                 -- interview | extraction | seed
+    entity_id      TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,       -- canonical name (page name for ratified rows)
+    type           TEXT NOT NULL,       -- person | project
+    aliases        TEXT DEFAULT '[]',   -- JSON array of alternate names (from page front matter)
+    note_path      TEXT,                -- vault path to the ratified entity page (NULL until ratified)
+    status         TEXT NOT NULL DEFAULT 'ratified',  -- ratified | proposed | rejected
+    origin         TEXT,                -- interview | extraction | seed
+    rollup_seeded  INTEGER NOT NULL DEFAULT 0  -- has registry.py ever written the marked
+                                                -- rollup block to this page? Lets
+                                                -- _regenerate_rollup_for() tell "the user
+                                                -- deleted the block" (leave it deleted) from
+                                                -- "this page never had one" (write it once).
+                                                -- DB-scoped: a dropped-and-rebuilt cairn.db
+                                                -- forgets a deletion and reseeds the block one
+                                                -- more time, unlike the vault-durable rejection
+                                                -- fix above -- see registry.py for the trade-off.
 );
 
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
@@ -109,6 +118,8 @@ def _migrate(conn):
         conn.execute("ALTER TABLE entities ADD COLUMN status TEXT NOT NULL DEFAULT 'ratified'")
     if "origin" not in cols:
         conn.execute("ALTER TABLE entities ADD COLUMN origin TEXT")
+    if "rollup_seeded" not in cols:
+        conn.execute("ALTER TABLE entities ADD COLUMN rollup_seeded INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_status ON entities(status)")
 
 

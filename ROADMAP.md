@@ -10,7 +10,7 @@ Cairn turns [Obsidian](https://obsidian.md) into a private working memory for on
 
 A ratified product thesis. Fourteen sections defining the vault as the hub, the personal and reflection content cut, five capabilities (Import, Ask, Distill, Generate, Dream), ratification as the gate into memory, and a connector layer built on a data contract rather than a code contract.
 
-A working reference implementation. The Python engine from the proof-of-concept phase: grounded retrieval with a receipt on every answer, refusal when the corpus does not contain the answer, a deterministic front door that answers without a model call, a protocol surface any OpenAI-compatible or Ollama-compatible chat client can use, and 26 gates green on two operating systems. On capable hardware a real question answers in 1.2 seconds end to end.
+A working reference implementation. The Python engine from the proof-of-concept phase: grounded retrieval with a receipt on every answer, refusal when the corpus does not contain the answer, a deterministic front door that answers without a model call, a protocol surface any OpenAI-compatible or Ollama-compatible chat client can use, and 29 gates green on two operating systems. On capable hardware a real question answers in 1.2 seconds end to end.
 
 A ratified drawing set. Twelve plates in [docs/WIREFRAMES.html](docs/WIREFRAMES.html) covering every screen, the whole-app layout, and a 24-row movement table (Plate K) that is the navigation spec, landed through four rounds of numbered review.
 
