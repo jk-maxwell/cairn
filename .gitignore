@@ -36,6 +36,15 @@ burden.csv
 gates.txt
 _ingest_failures.log
 
+# --- session and working artifacts -----------------------------------------
+# Continuity handoff notes. They quote vault structure, entity names, defect
+# reproductions and open design questions -- working material, and none of it
+# belongs on a remote. Each one already carries a "never commit this file"
+# header; this is the pattern that enforces it.
+continuity_*.md
+# scratch worktrees created by the task runner
+.claudia-worktrees/
+
 # --- transfer artifacts from the pre-git working method --------------------
 *.zip
 cargo*/
