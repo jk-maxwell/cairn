@@ -563,6 +563,114 @@ def t_registry_governance():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def t_registry_name_boundaries():
+    """
+    Name-variant folding must fire at word boundaries, never on a bare
+    substring. "Real Estate Division" is not the entity "State" -- but the
+    letters of "state" do sit inside "e-state", and a substring test cannot
+    tell those apart. Latent today only because the registry holds no short
+    names; an `organization` type would make it a live mis-link, silently
+    filing content under the wrong entity.
+
+    The shortening the matcher SHOULD keep is pinned here too, so the fix
+    cannot buy precision by dropping recall: a whole word in any position
+    ("Ortega" of "Ann Ortega") and a word-prefix ("Ori" of "Orion").
+    """
+    import registry
+
+    rows = [("e1", "State", "[]"),
+            ("e2", "Department of Health", "[]"),
+            ("e3", "Ann Ortega", '["Annie"]'),
+            ("e4", "Orion", "[]")]
+
+    traps = [("Real Estate Division", "'estate' merely contains 'state'"),
+             ("Interstate Commerce", "'interstate' merely contains 'state'")]
+    for probe, why in traps:
+        got = registry._match_in(rows, probe)
+        if got is not None:
+            raise RuntimeError(f"{probe!r} wrongly matched {got!r} -- {why}")
+
+    keep = [("Ann", "Ann Ortega"), ("Ortega", "Ann Ortega"),
+            ("Annie", "Ann Ortega"), ("Ori", "Orion"),
+            ("ann ortega", "Ann Ortega"),
+            ("Department of Health", "Department of Health")]
+    for probe, want in keep:
+        got = registry._match_in(rows, probe)
+        if got != want:
+            raise RuntimeError(f"{probe!r} resolved to {got!r}, expected {want!r}")
+
+    return f"{len(traps)} substring traps rejected, {len(keep)} real variants kept"
+
+
+def t_registry_alias_round_trip():
+    """
+    An alias holding a comma or a colon must survive being written to a page
+    and read back unchanged. Two independent faults conspire here:
+
+      writer  registry._fm_aliases emitted an unquoted YAML flow sequence, so
+              "Smith, Jane" was written as two aliases.
+      reader  parse_front_matter split a flow sequence on every comma without
+              regard for quoting, so even correctly quoted values came back in
+              pieces ('["Smith, Jane"]' -> ['"Smith', 'Jane"']).
+
+    Fixing the writer alone leaves the round trip broken, so this gate drives a
+    real ratify() -> scan_vault() cycle rather than testing either helper on its
+    own. It is also the prerequisite for wikilink-valued relations: a value like
+    [[Health Division]] cannot be stored until flow sequences parse correctly.
+    """
+    import json as _json
+    import shutil
+    import sqlite3
+    import tempfile
+    import registry
+
+    awkward = ["Smith, Jane", "Dept: Health", "Plain"]
+
+    tmp = Path(tempfile.mkdtemp(prefix="cairn-selftest-alias-"))
+    real_log = registry.GOVERNANCE_LOG
+    registry.GOVERNANCE_LOG = tmp / "governance.csv"
+    try:
+        conn = sqlite3.connect(tmp / "t.db")
+        conn.execute("PRAGMA foreign_keys = ON")
+        dbmod.init_db(conn)
+        vault = tmp / "vault"
+        vault.mkdir(parents=True)
+
+        if not registry.propose(conn, "Jane Smith", "person", None):
+            raise RuntimeError("propose() refused the fixture name")
+        eid = conn.execute("SELECT entity_id FROM entities WHERE name='Jane Smith'").fetchone()[0]
+        conn.execute("UPDATE entities SET aliases=? WHERE entity_id=?",
+                     (_json.dumps(awkward), eid))
+        conn.commit()
+
+        page = Path(registry.ratify(conn, eid, vault))
+        written = page.read_text(encoding="utf-8")
+
+        # The vault is authoritative, so prove the page alone carries the truth:
+        # rebuild from a DB that never saw these aliases.
+        conn2 = sqlite3.connect(tmp / "t2.db")
+        conn2.execute("PRAGMA foreign_keys = ON")
+        dbmod.init_db(conn2)
+        registry.scan_vault(conn2, vault)
+        row = conn2.execute("SELECT aliases FROM entities WHERE name='Jane Smith'").fetchone()
+        if row is None:
+            raise RuntimeError(f"page did not scan back as an entity; page was:\n{written}")
+        got = _json.loads(row[0] or "[]")
+        if got != awkward:
+            raise RuntimeError(f"aliases round-tripped as {got!r}, expected {awkward!r}; "
+                               f"page front matter was:\n{written.split('---')[1].strip()}")
+
+        # And the awkward alias must actually resolve.
+        if registry.match(conn2, "Smith, Jane", "person") != "Jane Smith":
+            raise RuntimeError("the comma-bearing alias does not resolve after a rescan")
+        conn.close()
+        conn2.close()
+        return f"{len(awkward)} aliases survive ratify -> page -> scan_vault -> match"
+    finally:
+        registry.GOVERNANCE_LOG = real_log
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 BURDEN_CSV = config.ROOT / "burden.csv"
 BURDEN_FIELDS = ["utc_timestamp", "pending", "pending_tracked", "oldest_pending_days",
                  "median_decision_days", "decisions_measured",
@@ -1041,6 +1149,8 @@ def main():
         ("Retrieval: no-hope floor skips the model", t_no_hope_floor),
         ("Retrieval-strength labels", t_strength_labels),
         ("Registry: engine links ratified structure, never invents it", t_registry_governance),
+        ("Registry: name matching is anchored at word boundaries", t_registry_name_boundaries),
+        ("Registry: aliases survive a page round trip", t_registry_alias_round_trip),
         ("Burden: ratification queue arrival vs drain", t_ratification_burden),
         ("Protocol: cairn is a selectable model", t_protocol_discovery),
         ("Protocol: contract holds against a hostile client", t_protocol_contract),

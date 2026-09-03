@@ -277,8 +277,55 @@ _FM_ITEM_RE = re.compile(r"^\s+-\s+(.*)$")
 def _unquote(s: str) -> str:
     s = s.strip()
     if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        if s[0] == '"':
+            # Double-quoted YAML and JSON agree on escapes, so this also undoes
+            # the \" written by _yaml_flow_scalar for a value containing quotes.
+            try:
+                return json.loads(s)
+            except json.JSONDecodeError:
+                pass
         return s[1:-1]
     return s
+
+
+def _split_flow(inner: str) -> list[str]:
+    """Split the body of a YAML flow sequence on its top-level commas only.
+
+    A plain inner.split(",") corrupts any value that legitimately contains a
+    comma: the alias "Smith, Jane" came back as two aliases even when it had
+    been written correctly quoted. Bracket depth is tracked as well as quoting,
+    so a nested sequence stays one element."""
+    out: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    quote = None
+    escaped = False
+    for ch in inner:
+        if escaped:
+            buf.append(ch)
+            escaped = False
+        elif quote:
+            buf.append(ch)
+            if ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+            buf.append(ch)
+        elif ch in "[{":
+            depth += 1
+            buf.append(ch)
+        elif ch in "]}":
+            depth -= 1
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            out.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    out.append("".join(buf))
+    return [s for s in (x.strip() for x in out) if s]
 
 
 def parse_front_matter(text: str) -> dict:
@@ -306,7 +353,7 @@ def parse_front_matter(text: str) -> dict:
             fm[key] = ""
         elif val.startswith("[") and val.endswith("]"):
             inner = val[1:-1].strip()
-            fm[key] = [_unquote(x) for x in inner.split(",") if x.strip()] if inner else []
+            fm[key] = [_unquote(x) for x in _split_flow(inner)] if inner else []
         else:
             fm[key] = _unquote(val)
         i += 1
@@ -320,14 +367,25 @@ def _tokens(s: str) -> list[str]:
 
 
 def _is_name_variant(short: str, long_: str) -> bool:
-    """True if `short` looks like a shorter form of `long_`: a word-prefix
-    ("Ann" of "Ann Ortega") or a plain substring ("Ori" of "Orion")."""
+    """True if `short` looks like a shorter form of `long_`: a run of whole
+    words appearing anywhere in `long_`, of which only the last may itself be
+    cut short -- "Ann" or "Ortega" of "Ann Ortega", "Ori" of "Orion".
+
+    The run is anchored at word boundaries deliberately. The unanchored
+    substring test this replaced also accepted "State" of "Real Estate
+    Division", because the letters of "state" sit inside "estate"; content
+    would then be filed under an entity it never mentioned. Nothing in the
+    registry is short enough to trigger that today, so the fault was latent,
+    but a name like "State" or "Health" is exactly what an organization type
+    introduces."""
     st, lt = _tokens(short), _tokens(long_)
-    if not st or not lt:
+    if not st or len(st) > len(lt):
         return False
-    if lt[:len(st)] == st:
-        return True
-    return short.lower() in long_.lower()
+    head, last = st[:-1], st[-1]
+    for i in range(len(lt) - len(st) + 1):
+        if lt[i:i + len(head)] == head and lt[i + len(head)].startswith(last):
+            return True
+    return False
 
 
 def _names_of(row_name: str, aliases_json: str) -> list[str]:
@@ -449,8 +507,24 @@ def _page_path(vault_dir: Path, etype: str, name: str) -> Path:
     return Path(vault_dir) / FOLDERS[etype] / f"{_sanitize(name)}.md"
 
 
+# Characters that end a plain scalar inside a YAML flow sequence, or that start
+# one with a reserved meaning. A value carrying any of them must be quoted or it
+# will not read back as the value that was written.
+_YAML_FLOW_UNSAFE = re.compile(r'''[,:\[\]{}"'#&*!|>%@`]|^\s|\s$|^$''')
+
+
+def _yaml_flow_scalar(s: str) -> str:
+    """Quote only when the value would otherwise be misread. This front matter
+    is read and edited by hand in Obsidian, so `aliases: [Annie]` stays plain
+    and only the awkward values pay for quotes."""
+    return json.dumps(s) if _YAML_FLOW_UNSAFE.search(s) else s
+
+
 def _fm_aliases(aliases: list[str]) -> str:
-    return "[" + ", ".join(aliases) + "]"
+    """Render aliases as a YAML flow sequence that _split_flow reads back
+    identically. The unquoted join this replaced turned the single alias
+    "Smith, Jane" into the two aliases "Smith" and "Jane"."""
+    return "[" + ", ".join(_yaml_flow_scalar(a) for a in aliases) + "]"
 
 
 def ratify(conn, entity_id: str, vault_dir) -> str:

@@ -574,7 +574,11 @@ def _front_matter_set(page: Path, key: str, value: str) -> bool:
 
 
 def _alias_yaml(aliases: list) -> str:
-    return "[" + ", ".join(json.dumps(a) for a in aliases) + "]"
+    """One renderer, in registry.py, paired with the parser that reads it back.
+    This was a second implementation of the same thing, and the two drifted:
+    registry's quoted nothing while this one quoted everything, and neither
+    round-tripped through a parser that split on every comma."""
+    return registry._fm_aliases(aliases)
 
 
 def _merge_aliases(conn, entity_id: str, new_aliases: list, vault_dir) -> None:
