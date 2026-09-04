@@ -175,8 +175,22 @@ The dials are already ratified and instrumented; the beta adopts them:
 
 **Exit criteria** — done and succeeded when: 28 days elapsed; both deployments
 onboarded and in weekly use (or the pivot recorded); habit and capability green
-in 3 of 4 weekly reviews; burden drain ≥ arrival over the final 14 days; zero
-silent failures observed; and a written post-beta findings note ranking the
-next horizon by observed evidence. **That note, not this plan, decides what
-gets built next.** Not exit criteria: tester count, Generate shipped, model
+in 3 of 4 weekly reviews; burden drain ≥ arrival over the final 14 days; **no
+failure went unannounced** (see below); and a written post-beta findings note
+ranking the next horizon by observed evidence. **That note, not this plan, decides what
+gets built next.**
+
+*Amended 2026-09-03.* This criterion previously read "zero silent failures
+observed", which could not be met or missed on purpose: a silent failure is
+exactly the case where "nothing happened" and "nothing was supposed to happen"
+look identical from outside, so watching harder never finds one. It is now
+measured against the instrumentation built to make the distinction possible —
+an ingest receipt per file, a watcher heartbeat that separates *idle* from
+*busy* from *dead* from *stopped on purpose*, and `Cairn/Health.md` reporting
+both in the vault, which is the one surface the habit dial guarantees gets
+opened. Concretely, over the final 14 days: **no receipt outstanding more than
+24h without appearing on the health note; and every failure that did occur was
+visible there before the owner noticed the symptom.** The test is not that
+nothing broke — across 28 days of real use something will — but that nothing
+broke *quietly*. Not exit criteria: tester count, Generate shipped, model
 quality.
