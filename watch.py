@@ -40,6 +40,7 @@ from pathlib import Path
 import config
 import db as dbmod
 import enrich
+import health
 import registry
 
 ROOT = config.ROOT
@@ -52,6 +53,19 @@ POLL_INTERVAL = 5.0        # how often we look at sources/ for changes
 DEBOUNCE_INTERVAL = 2.0    # quiet period required before we act on a change
 DEBOUNCE_MAX_WAIT = 30.0   # safety cap: act anyway if changes never go quiet
 SUBPROCESS_TIMEOUT = 1800  # 30 min hard ceiling per ingest/index run
+
+# How often the watcher records that it is still alive. Deliberately much
+# longer than POLL_INTERVAL: the heartbeat exists to distinguish "alive and
+# idle" from "dead", and once a minute settles that question precisely well
+# enough without writing to the database every five seconds.
+#
+# Why this exists at all: a watcher that dies at 2am produces exactly the same
+# observable as a quiet week -- no new notes. Without a heartbeat the owner
+# reads that silence as "no meetings", which is the single most expensive
+# misreading available during a 28-day beta, because it looks like a finding
+# about their working life rather than a broken process. The heartbeat turns
+# an absence into a stale timestamp, which is a thing you can actually see.
+HEARTBEAT_INTERVAL = 60.0
 
 _running = True
 
@@ -131,6 +145,49 @@ def registry_sync(reason: str) -> None:
         conn.close()
 
 
+def heartbeat(activity: str = "idle") -> None:
+    """Record that the watcher is alive, and what it is doing.
+
+    Two facts, not one. The timestamp alone cannot be read correctly, because
+    this loop is single-threaded and blocks inside run_subprocess for as long
+    as an ingest takes -- up to SUBPROCESS_TIMEOUT, half an hour. A watcher
+    busy converting a large transcript is therefore indistinguishable, by
+    timestamp alone, from a watcher that died; reporting the first as dead
+    would train the owner to ignore the alarm, which is worse than having no
+    alarm at all.
+
+    So we also record what the watcher was doing when it last checked in.
+    "idle" plus a stale timestamp means something is genuinely wrong.
+    "pipeline:<reason>" plus a stale timestamp means it is working, and only
+    becomes alarming once it exceeds the hard ceiling it should have hit.
+
+    Never raises. Instrumentation must not be able to take down the thing it
+    instruments: a watcher that died because its own health-reporting failed
+    would be an absurd way to lose a beta week.
+    """
+    try:
+        conn = dbmod.connect()
+        try:
+            conn.execute("PRAGMA busy_timeout = 10000")
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            for key, value in (("watcher_heartbeat", now),
+                               ("watcher_activity", activity)):
+                conn.execute(
+                    "INSERT INTO meta (key, value) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (key, value))
+            conn.commit()
+            # Re-render the vault-facing health note from the same connection.
+            # A heartbeat only the database can see is not worth writing: the
+            # owner reads the vault daily -- that is literally what the beta's
+            # habit dial measures -- and reads log files never.
+            health.write_health_note(conn, config.VAULT_DIR)
+        finally:
+            conn.close()
+    except Exception as e:
+        log(f"heartbeat WARN {type(e).__name__}: {e}")
+
+
 def diff_snapshots(old: dict, new: dict) -> tuple[list, list, list]:
     added = sorted(p for p in new if p not in old)
     removed = sorted(p for p in old if p not in new)
@@ -184,6 +241,45 @@ def run_subprocess(script: Path, label: str) -> bool:
     return True
 
 
+def clear_orphaned_receipts(conn) -> int:
+    """Drop non-terminal receipts whose source file no longer exists on disk.
+
+    A receipt records that a file was EXPECTED to become something. Delete the
+    file and that expectation is withdrawn -- but a receipt still sitting in
+    'seen' or 'converted' would go on raising an alarm about a document nobody
+    wants any more, and an alarm you cannot clear by doing the obvious thing is
+    how a health surface teaches people to ignore it.
+
+    The condition is the file's absence from DISK, not merely its absence from
+    `documents`. Those differ in the case that matters: a file killed between
+    the 'seen' write and conversion has no documents row but is still sitting
+    in sources/ waiting to be retried, and that receipt is a true alarm that
+    must survive. Only a file genuinely gone releases the expectation.
+
+    Terminal receipts are kept either way: 'failed' is real history that ages
+    out of the 7-day window by itself, and 'indexed' harms nothing.
+
+    Runs unconditionally, and deliberately NOT behind the "were any documents
+    pruned?" early return -- a file deleted before it ever became a document
+    prunes nothing, which is precisely when this cleanup is needed.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT source_path FROM receipts WHERE state IN ('seen','converted')"
+        ).fetchall()
+        stale = [r[0] for r in rows if not Path(r[0]).exists()]
+        if not stale:
+            return 0
+        conn.executemany("DELETE FROM receipts WHERE source_path = ?",
+                         [(sp,) for sp in stale])
+        conn.commit()
+        log(f"reconcile cleared {len(stale)} receipt(s) whose source file is gone")
+        return len(stale)
+    except Exception as e:
+        log(f"reconcile WARN could not clear orphaned receipts: {type(e).__name__}: {e}")
+        return 0
+
+
 def reconcile_deletions() -> int:
     """
     For every document whose source file no longer exists on disk: drop its
@@ -211,6 +307,8 @@ def reconcile_deletions() -> int:
         gone = [(doc_id, source_path, vault_path)
                 for doc_id, source_path, vault_path in rows
                 if not Path(source_path).exists()]
+        clear_orphaned_receipts(conn)
+
         if not gone:
             return 0
 
@@ -255,6 +353,10 @@ def reconcile_deletions() -> int:
 def run_pipeline(reason: str) -> None:
     t0 = time.time()
     log(f"cycle start reason={reason}")
+    # Declare the blocking work before entering it. Everything after this
+    # point can take minutes, during which this loop cannot beat -- so the
+    # last thing we say before going quiet has to explain the quiet.
+    heartbeat(f"pipeline:{reason}")
 
     ok_ingest = run_subprocess(INGEST_SCRIPT, "ingest")
 
@@ -267,6 +369,7 @@ def run_pipeline(reason: str) -> None:
     ok_index = run_subprocess(INDEX_SCRIPT, "index")
 
     log(f"cycle end reason={reason} elapsed={time.time() - t0:.1f}s ingest_ok={ok_ingest} index_ok={ok_index}")
+    heartbeat("idle")
 
 
 # ---- main loop ----------------------------------------------------------------
@@ -295,11 +398,23 @@ def main() -> None:
     last = snapshot()
     last_reg = registry_snapshot()  # taken AFTER sync, so our own writes don't re-trigger
 
+    heartbeat("startup")
+    last_beat = time.time()
+
     while _running:
         time.sleep(POLL_INTERVAL)
         if not _running:
             break
         try:
+            # Beat before doing any work, and on every pass including the ones
+            # where nothing changed. An idle watcher bumping its timestamp is
+            # exactly what separates it from a dead one; a heartbeat written
+            # only after a pipeline cycle would go stale during a genuinely
+            # quiet week and cry wolf.
+            if time.time() - last_beat >= HEARTBEAT_INTERVAL:
+                heartbeat("idle")
+                last_beat = time.time()
+
             cur = snapshot()
             if cur != last:
                 added, modified, removed = diff_snapshots(last, cur)
@@ -320,6 +435,7 @@ def main() -> None:
         except Exception as e:
             log(f"cycle ERROR {type(e).__name__}: {e}")
 
+    heartbeat("shutdown")
     log("shutdown")
 
 

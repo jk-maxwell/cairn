@@ -1070,6 +1070,126 @@ def _burden_table_cases():
     return len(cases)
 
 
+# --- Receipts + health: silence is made visible ------------------------------
+def t_receipts_and_health():
+    """Every file dropped in sources/ leaves a receipt, and an unfinished one
+    becomes visible in the vault.
+
+    Cairn already enforces "no receipt, no answer" on the answer side, strictly
+    enough that even a refusal carries one. This is the symmetric rule on the
+    ingest side, and it exists because a silent failure is precisely the case
+    where "nothing happened" and "nothing was supposed to happen" are
+    indistinguishable from outside. You cannot observe that by watching harder;
+    you have to record the expectation so its non-fulfilment becomes an event.
+
+    The evidence this is real: the vault's _ingest_failures.log sat with two
+    genuine failures in it for twelve days, unread, at a corpus of three
+    documents.
+
+    Four properties, checked against a temporary database so the owner's real
+    one is never touched:
+
+      1. The lifecycle advances seen -> converted -> indexed, and a failure is
+         recorded with its reason.
+      2. A non-terminal receipt older than the threshold is reported as
+         outstanding; terminal ones are not. This is the alarm.
+      3. The health note distinguishes a watcher that never reported, one that
+         is stale while idle, one that is merely busy in a pipeline, and one
+         that stopped on purpose. Conflating those is what trains a person to
+         ignore the page.
+      4. Rendering never raises, even against a database with no receipts
+         table at all -- the note must degrade honestly rather than crash the
+         watcher that writes it.
+    """
+    import shutil as _sh
+    import sqlite3 as _sq
+    import tempfile as _tf
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    import db as _db
+    import health as _health
+
+    tmp = Path(_tf.mkdtemp(prefix="cairn-selftest-receipts-"))
+    try:
+        conn = _sq.connect(str(tmp / "t.db"))
+        _db.init_db(conn)
+
+        # 1. lifecycle
+        src = str(tmp / "meeting.md")
+        _db.receipt_seen(conn, src, "meeting.md")
+        row = conn.execute("SELECT state FROM receipts WHERE source_path=?", (src,)).fetchone()
+        if not row or row[0] != "seen":
+            raise RuntimeError(f"receipt not created on seen: {row!r}")
+        _db.receipt_converted(conn, src, "doc-1")
+        _db.receipt_indexed(conn, src)
+        state, doc_id = conn.execute(
+            "SELECT state, doc_id FROM receipts WHERE source_path=?", (src,)).fetchone()
+        if state != "indexed" or doc_id != "doc-1":
+            raise RuntimeError(f"lifecycle did not reach indexed: {state!r}/{doc_id!r}")
+
+        bad = str(tmp / "broken.pdf")
+        _db.receipt_seen(conn, bad, "broken.pdf")
+        _db.receipt_failed(conn, bad, "MarkItDownError: no text extracted")
+        st, detail = conn.execute(
+            "SELECT state, detail FROM receipts WHERE source_path=?", (bad,)).fetchone()
+        if st != "failed" or "no text extracted" not in (detail or ""):
+            raise RuntimeError(f"failure not recorded with its reason: {st!r}/{detail!r}")
+
+        # 2. outstanding = non-terminal AND stale. Backdate a stuck one.
+        stuck = str(tmp / "stuck.md")
+        old = (_dt.now(_tz.utc) - _td(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        conn.execute("INSERT INTO receipts VALUES (?,?,NULL,'converted',NULL,?,?)",
+                     (stuck, "stuck.md", old, old))
+        conn.commit()
+        out = {r[0] for r in _db.receipts_outstanding(conn, older_than_minutes=30)}
+        if stuck not in out:
+            raise RuntimeError("a 3-hour-old non-terminal receipt was NOT reported outstanding")
+        if src in out or bad in out:
+            raise RuntimeError("a terminal receipt was wrongly reported outstanding")
+
+        # 3. the four watcher states must read differently
+        def _render(hb_ago_min, activity):
+            if hb_ago_min is None:
+                conn.execute("DELETE FROM meta WHERE key='watcher_heartbeat'")
+            else:
+                ts = (_dt.now(_tz.utc) - _td(minutes=hb_ago_min)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                _db.set_meta(conn, "watcher_heartbeat", ts)
+            _db.set_meta(conn, "watcher_activity", activity or "")
+            conn.commit()
+            return _health.render_health(conn)
+
+        never = _render(None, None)
+        if "never reported" not in never:
+            raise RuntimeError("a watcher that never reported is not named as such")
+        dead = _render(120, "idle")
+        if "STALE" not in dead:
+            raise RuntimeError("a two-hour-stale idle watcher was not flagged STALE")
+        busy = _render(10, "pipeline:change")
+        if "STALE" in busy or "busy" not in busy:
+            raise RuntimeError("a watcher busy in a pipeline was misreported as dead -- "
+                               "watch.py blocks for up to SUBPROCESS_TIMEOUT and cannot "
+                               "beat during a cycle; crying wolf here trains the owner "
+                               "to ignore the page")
+        stopped = _render(120, "shutdown")
+        if "STOPPED CLEANLY" not in stopped:
+            raise RuntimeError("a deliberately stopped watcher is not distinguished "
+                               "from one that died")
+
+        # 4. honest degradation with no receipts table at all
+        bare = _sq.connect(":memory:")
+        bare.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+        text = _health.render_health(bare)   # must not raise
+        if "receipts" not in text.lower():
+            raise RuntimeError("health note silently omitted the receipts sections "
+                               "instead of saying it cannot read them")
+        bare.close()
+        conn.close()
+        return ("lifecycle seen->converted->indexed, failure recorded with reason, "
+                "1 stale receipt outstanding (terminals excluded), 4 watcher states "
+                "distinguished, renders without a receipts table")
+    finally:
+        _sh.rmtree(tmp, ignore_errors=True)
+
+
 def t_ratification_burden():
     """
     Ratification burden: how much structure work the queue is asking of its owner.
@@ -1457,6 +1577,7 @@ def main():
         ("Registry: removing a Declined line un-rejects the name", t_registry_undecline),
         ("Registry: a user-deleted rollup block stays deleted", t_registry_rollup_deletion_sticks),
         ("Distillation: affect and assessments of individuals are never recorded", t_distillation_no_affect),
+        ("Receipts: every ingest leaves one, and silence becomes visible", t_receipts_and_health),
         ("Burden: ratification queue arrival vs drain", t_ratification_burden),
         ("Protocol: cairn is a selectable model", t_protocol_discovery),
         ("Protocol: contract holds against a hostile client", t_protocol_contract),

@@ -7,6 +7,9 @@ ingestion has no dependency on sqlite-vec being present.
 """
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
 import config
 
 SCHEMA = """
@@ -86,6 +89,27 @@ CREATE TABLE IF NOT EXISTS meeting_entities (
     FOREIGN KEY (doc_id) REFERENCES documents(doc_id) ON DELETE CASCADE,
     FOREIGN KEY (entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
 );
+
+-- The ingest-side half of the receipts doctrine ("no receipt, no answer" on
+-- ask.py's side; "no receipt, no ingest" here). Every file that lands in
+-- sources/ gets a row the moment ingest.py notices it, before any of the
+-- risky work (conversion, enrichment, embedding) runs -- so a crash mid-file
+-- still leaves a row behind instead of nothing. A row that never reaches a
+-- terminal state is what makes a silent failure countable: see
+-- receipts_outstanding() below. Keyed on source_path (not doc_id) because a
+-- receipt must be writable before ingest has derived anything about the
+-- file's content.
+CREATE TABLE IF NOT EXISTS receipts (
+    source_path  TEXT PRIMARY KEY,   -- absolute path of the file in sources/
+    source_name  TEXT NOT NULL,      -- basename, for display
+    doc_id       TEXT,               -- set once ingest derives one; NULL before that
+    state        TEXT NOT NULL,      -- seen | converted | indexed | failed
+    detail       TEXT,               -- exception text when state='failed', else NULL
+    first_seen   TEXT NOT NULL,      -- ISO 8601 UTC, set once and never updated
+    updated_at   TEXT NOT NULL       -- ISO 8601 UTC, bumped on every transition
+);
+
+CREATE INDEX IF NOT EXISTS idx_receipts_state ON receipts(state);
 """
 
 
@@ -140,3 +164,125 @@ def set_meta(conn, key, value):
         (key, str(value)),
     )
     conn.commit()
+
+
+# ---- receipts: ingest-side "no receipt, no ingest" bookkeeping -------------
+# See the CREATE TABLE comment above for the doctrine. Every function here is
+# a small, self-committing state transition (same pattern as set_meta above),
+# so a row is durable the instant it's written -- not batched behind whatever
+# else the caller's transaction is doing. Callers (ingest.py, index.py) are
+# responsible for wrapping every call in try/except: this is instrumentation,
+# and instrumentation must never be able to cost the user a document.
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def receipt_seen(conn, source_path: str, source_name: str) -> None:
+    """Record that a file was noticed and is expected to become something.
+
+    Upsert, not insert-only: a changed file re-entering the pipeline (ingest
+    is hash-based) must land back on this same row and move it out of
+    whatever terminal state it was in, not create a duplicate. first_seen is
+    part of the INSERT branch only, so it is set once and never touched
+    again. doc_id is deliberately left alone on the update branch -- a
+    re-seen file already has a stable, path-derived doc_id from its last
+    pass, and clearing it here would just reintroduce a NULL that doc_id_for()
+    is going to recompute identically a moment later anyway.
+    """
+    now = _now_iso()
+    conn.execute(
+        """
+        INSERT INTO receipts (source_path, source_name, doc_id, state, detail, first_seen, updated_at)
+        VALUES (?, ?, NULL, 'seen', NULL, ?, ?)
+        ON CONFLICT(source_path) DO UPDATE SET
+            source_name = excluded.source_name,
+            state       = 'seen',
+            detail      = NULL,
+            updated_at  = excluded.updated_at
+        """,
+        (source_path, source_name, now, now),
+    )
+    conn.commit()
+
+
+def receipt_converted(conn, source_path: str, doc_id: str) -> None:
+    """Advance a receipt to 'converted' and record the doc_id ingest derived
+    for it. No-op (zero rows affected) if 'seen' was never recorded for this
+    path -- callers that care can check, but ingest.py always writes 'seen'
+    first, so this should not happen in practice."""
+    conn.execute(
+        "UPDATE receipts SET state='converted', doc_id=?, detail=NULL, updated_at=? WHERE source_path=?",
+        (doc_id, _now_iso(), source_path),
+    )
+    conn.commit()
+
+
+def receipt_indexed(conn, source_path: str) -> None:
+    """Advance a receipt to 'indexed' -- the terminal success state, reached
+    once every chunk belonging to the document has been embedded."""
+    conn.execute(
+        "UPDATE receipts SET state='indexed', detail=NULL, updated_at=? WHERE source_path=?",
+        (_now_iso(), source_path),
+    )
+    conn.commit()
+
+
+def receipt_failed(conn, source_path: str, detail: str, source_name: str | None = None) -> None:
+    """Mark a receipt 'failed' with the exception text in detail.
+
+    Upsert, not update-only: a crash can happen before 'seen' was ever
+    recorded (e.g. the file vanished between being listed and being read),
+    and the failure still has to be visible rather than silently dropped for
+    want of a prior row. source_name is optional and only used to fill in a
+    brand-new row in that situation; it defaults to the path's basename.
+    """
+    now = _now_iso()
+    name = source_name or Path(source_path).name
+    conn.execute(
+        """
+        INSERT INTO receipts (source_path, source_name, doc_id, state, detail, first_seen, updated_at)
+        VALUES (?, ?, NULL, 'failed', ?, ?, ?)
+        ON CONFLICT(source_path) DO UPDATE SET
+            state      = 'failed',
+            detail     = excluded.detail,
+            updated_at = excluded.updated_at
+        """,
+        (source_path, name, detail, now, now),
+    )
+    conn.commit()
+
+
+def receipts_outstanding(conn, older_than_minutes: int = 30):
+    """Non-terminal receipts (state 'seen' or 'converted') last touched more
+    than older_than_minutes ago -- the alarm condition. This is what makes
+    "zero silent failures" falsifiable: a receipt that never reaches a
+    terminal state shows up here as a stale, countable row instead of as
+    nothing. Returns rows as (source_path, source_name, doc_id, state,
+    detail, first_seen, updated_at) tuples, oldest first.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return conn.execute(
+        """
+        SELECT source_path, source_name, doc_id, state, detail, first_seen, updated_at
+        FROM receipts
+        WHERE state IN ('seen', 'converted') AND updated_at < ?
+        ORDER BY updated_at ASC
+        """,
+        (cutoff,),
+    ).fetchall()
+
+
+def receipts_recent_failures(conn, days: int = 7):
+    """Receipts in state 'failed' updated within the last `days` days, most
+    recent first. Same tuple shape as receipts_outstanding()."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return conn.execute(
+        """
+        SELECT source_path, source_name, doc_id, state, detail, first_seen, updated_at
+        FROM receipts
+        WHERE state = 'failed' AND updated_at >= ?
+        ORDER BY updated_at DESC
+        """,
+        (cutoff,),
+    ).fetchall()

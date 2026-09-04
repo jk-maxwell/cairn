@@ -20,6 +20,7 @@ Requires Ollama running locally with the embedding model pulled, e.g.:
 
 import argparse
 import json
+import logging
 import struct
 import sys
 import time
@@ -29,6 +30,8 @@ import urllib.request
 import config
 import db as dbmod
 import sqlite_vec
+
+log = logging.getLogger("cairn")
 
 # Re-exported for tools/mapcheck.py's truth gate (same pattern as ask.py):
 # the Map must name the model this file actually embeds with.
@@ -139,9 +142,34 @@ def check_and_stamp_embed_model(conn, reset=False):
 # ---- main ------------------------------------------------------------------
 
 def fetch_pending(conn):
+    # doc_id rides along so the embedding loop can tell, per batch, which
+    # documents it has touched -- needed to advance their receipts to
+    # 'indexed' once every one of their chunks is embedded (see main()).
     return conn.execute(
-        "SELECT chunk_id, heading, text FROM chunks WHERE embedded=0 ORDER BY doc_id, ordinal"
+        "SELECT chunk_id, doc_id, heading, text FROM chunks WHERE embedded=0 ORDER BY doc_id, ordinal"
     ).fetchall()
+
+
+def mark_indexed_receipts(conn, doc_ids) -> None:
+    """For each doc_id touched by this run, advance its receipt to 'indexed'
+    if (and only if) it no longer has any unembedded chunks. A document's
+    chunks can span multiple embedding batches, so this is checked once per
+    doc_id after the run rather than chunk-by-chunk. Receipt bookkeeping is
+    never allowed to break the index build -- failures here are logged and
+    swallowed, not raised.
+    """
+    for doc_id in doc_ids:
+        try:
+            remaining = conn.execute(
+                "SELECT COUNT(*) FROM chunks WHERE doc_id=? AND embedded=0", (doc_id,)
+            ).fetchone()[0]
+            if remaining:
+                continue
+            row = conn.execute("SELECT source_path FROM documents WHERE doc_id=?", (doc_id,)).fetchone()
+            if row:
+                dbmod.receipt_indexed(conn, row[0])
+        except Exception as e:
+            log.warning("receipt: could not record 'indexed' for doc_id=%s: %s", doc_id, e)
 
 
 def human_time(seconds: float) -> str:
@@ -171,7 +199,7 @@ def main():
         print("Nothing to embed. All chunks are indexed.")
         return
 
-    total_chars = sum(len(t) for _, _, t in pending)
+    total_chars = sum(len(t) for _, _, _, t in pending)
     est = n * EST_SECONDS_PER_CHUNK
     print(f"Pending chunks : {n}")
     print(f"Total text     : {total_chars:,} chars")
@@ -186,10 +214,11 @@ def main():
     t0 = time.time()
     done = 0
     measured_rate = None
+    touched_doc_ids = set()  # which documents this run embedded chunks for, for the receipts pass below
 
     for start in range(0, n, BATCH_SIZE):
         batch = pending[start:start + BATCH_SIZE]
-        texts = [embed_text_for(h, t) for _, h, t in batch]
+        texts = [embed_text_for(h, t) for _, _, h, t in batch]
         bt0 = time.time()
         try:
             vecs = embed_batch(texts)
@@ -198,7 +227,7 @@ def main():
             print("  Is the Ollama server running? Try: ollama list")
             break
 
-        for (chunk_id, _, _), vec in zip(batch, vecs):
+        for (chunk_id, doc_id, _, _), vec in zip(batch, vecs):
             # sqlite-vec's vec0 virtual table does not honor INSERT OR REPLACE
             # (the conflict clause never reaches its update hook, so a re-embed
             # of an existing chunk_id -- e.g. after ingest --force -- raises
@@ -209,6 +238,7 @@ def main():
                 (chunk_id, serialize(vec)),
             )
             conn.execute("UPDATE chunks SET embedded=1 WHERE chunk_id=?", (chunk_id,))
+            touched_doc_ids.add(doc_id)
         conn.commit()
 
         done += len(batch)
@@ -218,6 +248,8 @@ def main():
             remaining = (n - done) * measured_rate
             print(f"  measured {measured_rate:.2f}s/chunk -> est remaining ~{human_time(remaining)}")
         print(f"  {done}/{n} embedded")
+
+    mark_indexed_receipts(conn, touched_doc_ids)
 
     dt = time.time() - t0
     indexed = conn.execute("SELECT COUNT(*) FROM vec_chunks").fetchone()[0]

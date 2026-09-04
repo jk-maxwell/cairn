@@ -17,6 +17,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import argparse
 import hashlib
+import logging
 import re
 import time
 from datetime import datetime, timezone
@@ -26,6 +27,8 @@ import config
 import db as dbmod
 import enrich
 from markitdown import MarkItDown
+
+log = logging.getLogger("cairn")
 
 
 # ---- small helpers ---------------------------------------------------------
@@ -265,6 +268,16 @@ def process_file(md, conn, source: Path, force=False, dry_run=False):
     if dry_run:
         return ("would-ingest", 0)
 
+    # Receipt: 'seen', written before any of the real work below (conversion,
+    # enrichment, chunking) so that a crash on the very next line still leaves
+    # a row behind -- see the receipts doctrine in db.py. Must never be able
+    # to cost the user a document, so a failure here is logged and swallowed,
+    # not raised.
+    try:
+        dbmod.receipt_seen(conn, str(source), source.name)
+    except Exception as e:
+        log.warning("receipt: could not record 'seen' for %s: %s", source, e)
+
     if source.suffix.lower() in {".md", ".txt"}:
         # Already plain text or markdown: read it directly. MarkItDown's
         # PlainTextConverter trusts charset detection, which mislabels UTF-8 as
@@ -334,6 +347,42 @@ def process_file(md, conn, source: Path, force=False, dry_run=False):
             (f"{doc_id}-{i:04d}", doc_id, i, heading, ctext, len(ctext)),
         )
     conn.commit()
+
+    # Receipt: 'converted', now that doc_id is known and both the vault file
+    # and the chunk rows are committed. index.py advances the same row to
+    # 'indexed' once every chunk is embedded.
+    #
+    # Except when there is nothing to embed. A file that converts cleanly to
+    # zero chunks is the quietest failure this pipeline has: conversion
+    # "succeeded", the run reports ok, a document row exists -- and the thing
+    # contributes nothing to retrieval, so Ask can never cite it. It is in the
+    # corpus and absent from it at the same time. A corrupt PDF does exactly
+    # this: MarkItDown extracts no text rather than raising, so the error path
+    # never runs.
+    #
+    # Left as 'converted' it would eventually surface as a stale non-terminal
+    # receipt, but under a vague heading ("stuck") that describes the symptom
+    # instead of the fault, and only after the outstanding threshold elapsed.
+    # Naming it now is both faster and truthful.
+    if not chunks:
+        try:
+            dbmod.receipt_failed(
+                conn, str(source),
+                "converted but produced 0 chunks -- nothing to retrieve, so this "
+                "document can never be cited. Usually a corrupt, empty, or "
+                "image-only file whose text extraction silently yielded nothing.",
+                source_name=source.name)
+            log.warning("ingest: %s converted to ZERO chunks -- recorded as failed; "
+                        "it would otherwise be silently unretrievable", source.name)
+        except Exception as e:
+            log.warning("ingest: receipt (zero-chunk) failed for %s: %s", source.name, e)
+        return ("ingest", 0)
+
+    try:
+        dbmod.receipt_converted(conn, str(source), doc_id)
+    except Exception as e:
+        log.warning("receipt: could not record 'converted' for %s: %s", source, e)
+
     return ("ingest", len(chunks))
 
 
@@ -382,6 +431,14 @@ def main():
             failed += 1
             failures.append(f"{p}\t{type(e).__name__}: {e}")
             print(f"  FAIL  {rel}  ({type(e).__name__}: {e})")
+            # Receipt: 'failed', with the exception text as detail. This is an
+            # addition alongside _ingest_failures.log below, not a replacement
+            # for it -- upsert so a crash before 'seen' was ever written (e.g.
+            # the file vanished mid-scan) still lands a row.
+            try:
+                dbmod.receipt_failed(conn, str(p), f"{type(e).__name__}: {e}", source_name=p.name)
+            except Exception as e2:
+                log.warning("receipt: could not record 'failed' for %s: %s", p, e2)
 
     dt = time.time() - t0
     print(f"\nDone in {dt:.1f}s. ingested={ingested} skipped={skipped} failed={failed} chunks={total_chunks}")
