@@ -31,31 +31,61 @@ packaging polish beyond what the second machine actually needs.
 
 ## Phases and checkpoints
 
-### Phase 0 — Housekeeping (one sitting)
+### Phase 0 — Housekeeping (one sitting) — **complete 2026-09-02/03**
 
-1. Commit the pending registry bugfix and the 2026-09-02 ratification edits,
-   with the standing manual sensitive-term review.
-2. Restart the engine and watcher (both currently down).
-3. Create a **private** remote and push `main` — owner confirmation required.
-   First time the repo ever leaves the machine, so the sensitive sweep covers
-   **full history**, not just current files, and the `backup-pre-scrub` branch
-   is never pushed. A dirty history blocks the remote until rewritten clean.
+1. ~~Commit the pending registry bugfix and the 2026-09-02 ratification edits,
+   with the standing manual sensitive-term review.~~ **Done.**
+2. ~~Restart the engine and watcher (both currently down).~~ **Done** — engine
+   and watcher both up.
+3. ~~Create a **private** remote and push `main`.~~ **Done, but publicly, not
+   privately — this plan was overridden and the override is recorded here
+   rather than absorbed silently.** The repository is public at
+   `github.com/jk-maxwell/cairn`. The reason is Phase 2: Cairn is being
+   installed on a **government work computer**, and on that machine an opaque
+   personal binary pulled from a private URL is not installable, whereas
+   auditable open source is. Being readable by the reviewer is what makes the
+   second deployment possible at all — so publishing is not a departure from
+   the plan's goal, it is a precondition of the plan's own Phase 2. The ruling
+   itself is recorded in DECISIONS 2026-09-02, which also amends ROADMAP
+   section 7.
+
+   What protected people still held: the sensitive-term sweep covered **full
+   history**, not just current files; the one real leak it found (the owner's
+   absolute machine path in a smoke-test report) was removed by rewriting
+   history while no remote existed; and `backup-pre-scrub` was never pushed and
+   remains local-only. What was given up is optionality — a public repository
+   can be cloned and cached within minutes, so the Horizon 3 integrity work now
+   happens under observation rather than before it.
 
 ### Phase 1 — Personal deployment live
 
-1. **Affect prohibition** in the distillation prompt plus a negative selftest
-   gate: a checked-in fixture transcript baited with tone and assessments of
+1. **Affect prohibition** — **done** (`enrich.py`, gate
+   `t_distillation_no_affect`, fixture
+   `tests/fixtures/affect-bait-transcript.md`; 29 gates total). In the
+   distillation prompt plus a negative selftest gate: a checked-in fixture transcript baited with tone and assessments of
    individuals must yield drafts containing none of it. Prompt and gate
    redundant by doctrine. Lands before daily real distillation, because beta
    means real meetings about real colleagues. Implemented unconditionally —
    consistent with unratified proposal 6, which only adds the warned opt-out.
-2. **Executive playbook**: lens as data (questions + relationship vocabulary:
-   mentor, advisor, investor, counterpart), lens choice as the interview's
-   optional first question, persisted as `cairn-playbook` in `Profile.md`.
+2. **Executive playbook** — *in progress, the last build item before
+   checkpoint 1*: lens as data (questions + relationship vocabulary: mentor,
+   advisor, investor, counterpart), lens choice as the interview's optional
+   first question, persisted as `cairn-playbook` in `Profile.md`.
    Scope ruling: the lens drives the **interview only** for MVP;
    relation-proposals-from-enrichment is a fast-follow once daily use shows
    what relations actually come up.
-3. **Two ownership defects, confirmed then fixed.** Both were found on
+
+   **Singleton ruling (owner, 2026-09-03):** *"When you run a playbook, you
+   commit to it. Cairn can at most hold one playbook at a time."* One active
+   playbook per deployment, not per profile and not per interview — which is
+   what makes the two deployments a real test in Phase 2 rather than a
+   configuration toggle: the work machine commits to the government lens, the
+   personal machine to the executive one, and neither can quietly drift into
+   the other. Switching an already-committed playbook is therefore never
+   silent; it requires explicit confirmation and is logged.
+3. **Two ownership defects, confirmed then fixed** — **done** (commit
+   `2be3733`; rejections now survive a rebuild, and a deleted rollup stays
+   deleted). Both were found on
    2026-08-29 and neither is cosmetic in a beta the owner lives inside.
    *Rejection permanence*: `reject()` writes only to the database, and a
    rejected entity has no vault page by definition, so dropping `cairn.db`
@@ -100,7 +130,7 @@ packaging polish beyond what the second machine actually needs.
 4. **Government lens**: position and remit, org and parent chain, counterpart
    divisions, standing programmes vs initiatives, roles then holders, domain
    vocabulary; empty relationship vocabulary by design.
-5. **Install story, proven by doing the real second install** from the private
+5. **Install story, proven by doing the real second install** from the public
    remote: setup script, start/stop wrapper replacing raw `nohup`, plugin
    steps — written up as the quickstart doc while doing it.
 6. **Checkpoint 2 (owner)**: onboard the work deployment with the government

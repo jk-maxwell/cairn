@@ -1,0 +1,38 @@
+{
+  "id": "executive",
+  "name": "Executive",
+  "description": "The default lens: role and org context, active projects, regular collaborators, current priorities, and team vocabulary.",
+  "relationship_vocabulary": ["mentor", "advisor", "investor", "counterpart"],
+  "questions": [
+    {
+      "key": "role",
+      "question": "First up: what's your role, and what kind of organization do you work in?",
+      "followup": "Got it. Anything else about the context worth knowing -- your team, your department, who you answer to?",
+      "thin_threshold": 25
+    },
+    {
+      "key": "projects",
+      "question": "What projects are you actively working on? One line each, using their real names -- plus any shorthand, aliases, or codenames people use for them.",
+      "followup": "That was quick -- any others, even back-burner ones? Shorthand and codenames welcome.",
+      "thin_threshold": 20
+    },
+    {
+      "key": "people",
+      "question": "Who do you work with regularly? Names as they'd appear in a meeting transcript, plus any nicknames.",
+      "followup": "Anyone else -- even occasional collaborators whose names show up in transcripts?",
+      "thin_threshold": 15
+    },
+    {
+      "key": "priorities",
+      "question": "What are your current priorities, and what does \"done\" look like for the big ones?",
+      "followup": "And roughly when or how would you call the biggest one done?",
+      "thin_threshold": 30
+    },
+    {
+      "key": "vocab",
+      "question": "Last one: any team vocabulary worth knowing? Acronyms, codenames, shorthand that shows up in meetings.",
+      "followup": null,
+      "thin_threshold": 0
+    }
+  ]
+}

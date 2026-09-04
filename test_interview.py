@@ -14,6 +14,11 @@ What it does, with NO manual steps and NO touching of the live engine or vault:
      reject took effect.
   4. Asserts a normal (non-interview) question still routes to retrieval and
      that /cancel abandons an interview cleanly.
+  5. Unit-tests the playbook loader and the singleton-conflict logic directly
+     against interview.py (no server, no Ollama call) -- malformed/missing
+     playbook files fail loudly, a fresh deployment picks up the skip-implies-
+     default path, and a deployment recording a different playbook surfaces
+     the conflict and honors either a confirmed switch or a decline.
 
 All names below are INVENTED fixtures. Requires Ollama running with
 config.GEN_MODEL pulled (the answer-parsing step calls the real model).
@@ -117,6 +122,144 @@ def find_page(folder: Path, needle: str) -> Path | None:
     return None
 
 
+# ---- playbook loader + singleton-conflict unit tests (no server, no Ollama) ----
+# These exercise interview.py directly rather than over HTTP. They need no
+# CAIRN_DB_PATH / CAIRN_VAULT_DIR env vars because every function under test
+# takes vault_dir as an explicit argument -- config.VAULT_DIR (the real vault)
+# is never touched.
+
+def run_playbook_unit_tests():
+    print("\n--- playbook loader + singleton-conflict (no server) ---")
+    sys.path.insert(0, str(ROOT))
+    import interview
+
+    # -- the shipped default loads and validates -----------------------------
+    pb = interview.load_playbook("executive")
+    check("playbook: executive loads", pb["id"] == "executive")
+    check("playbook: executive carries the ratified relationship vocabulary",
+          set(pb["relationship_vocabulary"]) == {"mentor", "advisor", "investor", "counterpart"},
+          str(pb["relationship_vocabulary"]))
+    check("playbook: executive has 5 questions (the original ONBOARDING_STEPS, unchanged)",
+          len(pb["questions"]) == 5, str([q["key"] for q in pb["questions"]]))
+    steps = interview.playbook_steps(pb)
+    check("playbook: playbook_steps() returns the (key, question, followup, threshold) shape",
+          steps[0][0] == "role" and isinstance(steps[0][3], int), str(steps[0]))
+
+    # -- unknown/malformed playbooks fail loudly, never half-populated -------
+    tmp_pb_dir = Path(tempfile.mkdtemp(prefix="cairn-playbook-test-"))
+    real_dir = interview.PLAYBOOKS_DIR
+    interview._PLAYBOOK_CACHE.clear()
+    interview.PLAYBOOKS_DIR = tmp_pb_dir
+    try:
+        try:
+            interview.load_playbook("nonexistent")
+            check("playbook: missing file raises PlaybookError", False)
+        except interview.PlaybookError:
+            check("playbook: missing file raises PlaybookError", True)
+
+        (tmp_pb_dir / "broken.json").write_text("{not valid json", encoding="utf-8")
+        try:
+            interview.load_playbook("broken")
+            check("playbook: malformed JSON raises PlaybookError", False)
+        except interview.PlaybookError:
+            check("playbook: malformed JSON raises PlaybookError", True)
+
+        (tmp_pb_dir / "half.json").write_text(
+            json.dumps({"id": "half", "name": "Half", "description": "missing vocab/questions"}),
+            encoding="utf-8")
+        try:
+            interview.load_playbook("half")
+            check("playbook: missing required key(s) raises PlaybookError", False)
+        except interview.PlaybookError:
+            check("playbook: missing required key(s) raises PlaybookError", True)
+
+        (tmp_pb_dir / "mismatch.json").write_text(
+            json.dumps({"id": "other", "name": "Other", "description": "id mismatch",
+                       "relationship_vocabulary": [], "questions": [
+                           {"key": "k", "question": "q?", "followup": None, "thin_threshold": 0}]}),
+            encoding="utf-8")
+        try:
+            interview.load_playbook("mismatch")
+            check("playbook: id mismatch between filename and declared id raises PlaybookError", False)
+        except interview.PlaybookError:
+            check("playbook: id mismatch between filename and declared id raises PlaybookError", True)
+    finally:
+        interview.PLAYBOOKS_DIR = real_dir
+        interview._PLAYBOOK_CACHE.clear()
+
+    # -- _match_playbook: simple, deterministic, case-insensitive ------------
+    pbs = interview.available_playbooks()
+    check("playbook: available_playbooks() lists executive", any(p["id"] == "executive" for p in pbs))
+    check("playbook: _match_playbook matches by id", interview._match_playbook("executive", pbs) == "executive")
+    check("playbook: _match_playbook matches by name, case-insensitive",
+          interview._match_playbook("EXECUTIVE", pbs) == "executive")
+    check("playbook: _match_playbook returns None for an unrecognized reply",
+          interview._match_playbook("something else entirely", pbs) is None)
+
+    # -- an unrecognized lens reply must NOT silently become the default -----
+    # Regression guard. Skipping is an explicit choice; a reply that matches no
+    # playbook is not. Quietly substituting the default would commit the
+    # deployment to a lens the user never picked, and the singleton rule makes
+    # that stick. "government" is the specific reply this protects against:
+    # that lens is planned but unbuilt, so it is the most likely thing typed.
+    _fresh = Path(tempfile.mkdtemp(prefix="cairn-lens-unknown-"))
+    out = "".join(interview._handle_lens_step(_fresh, "lens", {}, "government"))
+    mk = interview._decode_marker(out)
+    check("lens: an unrecognized playbook name is not silently defaulted",
+          "pb" not in (mk or {}))
+    check("lens: an unrecognized reply loops back to the lens question",
+          (mk or {}).get("s") == "lens")
+    check("lens: the re-ask names what is actually available",
+          "executive" in out and "government" in out)
+    _retry = "".join(interview._handle_lens_step(_fresh, "lens", mk, "executive"))
+    check("lens: answering correctly after a re-ask proceeds into that playbook",
+          (interview._decode_marker(_retry) or {}).get("pb") == "executive")
+    check("lens: an explicit skip still resolves to the default without friction",
+          (interview._decode_marker(
+              "".join(interview._handle_lens_step(_fresh, "lens", {}, "skip"))
+          ) or {}).get("pb") == interview.DEFAULT_PLAYBOOK_ID)
+
+    # -- singleton conflict: surfaced, and both confirm/decline honored ------
+    vault = Path(tempfile.mkdtemp(prefix="cairn-singleton-test-"))
+
+    # No Profile.md yet -> no conflict; skipping picks the default straight away.
+    reply = "".join(interview._handle_lens_step(vault, "lens", {}, "skip"))
+    check("singleton: fresh deployment (no Profile.md) -- skip goes straight to the first question",
+          "cairn-iv" in reply and '"pb": "executive"' in reply, reply[:200])
+
+    # Seed a Profile.md recording a DIFFERENT playbook than the interview would pick.
+    vault.mkdir(exist_ok=True)
+    (vault / "Profile.md").write_text(
+        "---\ncairn-type: profile\ncairn-playbook: government\n---\n", encoding="utf-8")
+    check("singleton: _read_current_playbook_id reads the recorded playbook back",
+          interview._read_current_playbook_id(vault) == "government")
+
+    reply = "".join(interview._handle_lens_step(vault, "lens", {}, "skip"))
+    check("singleton: a recorded playbook different from the chosen one is surfaced, not silently switched",
+          "already runs" in reply.lower() and "government" in reply and "executive" in reply
+          and '"s": "lens_confirm"' in reply, reply[:300])
+    check("singleton: the conflict marker carries both ids for reconstruction",
+          '"chosen": "executive"' in reply and '"existing": "government"' in reply, reply[:300])
+
+    # Decline the switch -- the interview must continue with the EXISTING playbook
+    # (chosen="government" here is a stand-in for "some other lens the user typed";
+    # it need not be loadable, since a decline never loads it).
+    marker = {"chosen": "government", "existing": "executive"}
+    reply = "".join(interview._handle_lens_step(vault, "lens_confirm", marker, "no"))
+    check("singleton: declining a switch away from a loadable existing playbook "
+          "continues the interview with it",
+          '"pb": "executive"' in reply and "role" in reply.lower(), reply[:200])
+
+    # Confirm the switch -- the interview must continue with the NEWLY chosen playbook.
+    marker = {"chosen": "executive", "existing": "some-other-lens"}
+    reply = "".join(interview._handle_lens_step(vault, "lens_confirm", marker, "yes"))
+    check("singleton: confirming the switch continues the interview with the new playbook",
+          '"pb": "executive"' in reply and "role" in reply.lower(), reply[:200])
+
+    shutil.rmtree(vault, ignore_errors=True)
+    shutil.rmtree(tmp_pb_dir, ignore_errors=True)
+
+
 # ---- the canned onboarding conversation (invented fixtures only) --------------
 
 ONBOARDING_ANSWERS = [
@@ -143,7 +286,15 @@ def run_onboarding(base, vault):
     print("\n--- onboarding interview ---")
     history = []
     reply = converse(base, history, "/interview", stream=True)  # exercise streaming once
-    check("onboarding: /interview opens with the role question",
+    check("onboarding: /interview opens with the optional lens question",
+          "playbook" in reply.lower() and "cairn-iv" in reply, reply[:200])
+    check("onboarding: lens question offers the executive playbook",
+          "executive" in reply.lower(), reply[:300])
+
+    # Skip the lens question -- the common case -- and confirm the default
+    # (executive) playbook is what carries the interview forward.
+    reply = converse(base, history, "skip")
+    check("onboarding: skipping the lens question moves straight to the role question",
           "role" in reply.lower() and "cairn-iv" in reply, reply[:200])
 
     for i, answer in enumerate(ONBOARDING_ANSWERS):
@@ -167,6 +318,8 @@ def run_onboarding(base, vault):
         body = profile.read_text(encoding="utf-8")
         check("onboarding: Profile.md front matter cairn-type: profile",
               fm.get("cairn-type") == "profile", str(fm))
+        check("onboarding: Profile.md records the singleton playbook (cairn-playbook: executive)",
+              fm.get("cairn-playbook") == "executive", str(fm))
         check("onboarding: Profile.md carries the user's words",
               "Fernwheel" in body and "barn" in body, body[:300])
 
@@ -306,6 +459,12 @@ def main():
     args = ap.parse_args()
     if args.port in (4001, 8765):
         sys.exit("refusing to run on a reserved port (4001 and 8765 are off-limits)")
+
+    try:
+        run_playbook_unit_tests()
+    except Exception as e:
+        failed.append(f"unhandled: {type(e).__name__}: {e}")
+        print(f"FAIL  unhandled: {type(e).__name__}: {e}")
 
     tmp = Path(tempfile.mkdtemp(prefix="cairn-interview-test-"))
     vault = tmp / "vault"

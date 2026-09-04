@@ -203,41 +203,150 @@ def is_interview(messages) -> bool:
     return reconstruct(messages) is not None
 
 
-# ---- the onboarding script (deterministic code, not the model) ---------------
+# ---- playbooks: interview lenses as data (DECISIONS 2026-09-02, entries 3 & 5) --
+#
+# A playbook is a lens on the onboarding interview -- its questions and its
+# relationship vocabulary -- loaded from playbooks/<id>.json rather than
+# hardcoded here, so a second lens (government, worker, personal -- see
+# DECISIONS.md) is a new file, not a code change. "executive" ships as the
+# MVP default and reproduces the five questions this module used to hardcode
+# verbatim, so an existing user's interview does not regress.
+#
+# Cairn holds exactly one playbook per deployment (the owner's singleton
+# ruling): the chosen id is persisted as `cairn-playbook` in Profile.md's
+# front matter, and a re-run that would pick a *different* one must be
+# confirmed explicitly rather than silently switched. See _handle_lens_step.
 
-# key, question, follow-up (None = never), thin-answer threshold in chars
-ONBOARDING_STEPS = [
-    ("role",
-     "First up: what's your role, and what kind of organization do you work in?",
-     "Got it. Anything else about the context worth knowing -- your team, "
-     "your department, who you answer to?",
-     25),
-    ("projects",
-     "What projects are you actively working on? One line each, using their real "
-     "names -- plus any shorthand, aliases, or codenames people use for them.",
-     "That was quick -- any others, even back-burner ones? Shorthand and "
-     "codenames welcome.",
-     20),
-    ("people",
-     "Who do you work with regularly? Names as they'd appear in a meeting "
-     "transcript, plus any nicknames.",
-     "Anyone else -- even occasional collaborators whose names show up in "
-     "transcripts?",
-     15),
-    ("priorities",
-     "What are your current priorities, and what does \"done\" look like for "
-     "the big ones?",
-     "And roughly when or how would you call the biggest one done?",
-     30),
-    ("vocab",
-     "Last one: any team vocabulary worth knowing? Acronyms, codenames, "
-     "shorthand that shows up in meetings.",
-     None,
-     0),
-]
+PLAYBOOKS_DIR = Path(__file__).resolve().parent / "playbooks"
+DEFAULT_PLAYBOOK_ID = "executive"
+
+_PLAYBOOK_REQUIRED_KEYS = {"id", "name", "description", "relationship_vocabulary", "questions"}
+_QUESTION_REQUIRED_KEYS = {"key", "question", "followup", "thin_threshold"}
+
+
+class PlaybookError(Exception):
+    """A playbook file is missing, unreadable, or malformed. Raised loudly and
+    never swallowed: a half-populated lens (e.g. missing vocabulary, or a
+    question with no key) is worse than a failed interview turn, per the
+    MVP ruling that unknown/missing playbooks must fail loudly."""
+
+
+def _validate_playbook(obj, playbook_id: str) -> dict:
+    if not isinstance(obj, dict):
+        raise PlaybookError(f"playbook {playbook_id!r} must be a JSON object, got {type(obj).__name__}")
+    missing = _PLAYBOOK_REQUIRED_KEYS - obj.keys()
+    if missing:
+        raise PlaybookError(f"playbook {playbook_id!r} missing required key(s): {sorted(missing)}")
+    if str(obj["id"]) != playbook_id:
+        raise PlaybookError(f"playbook file {playbook_id}.json declares id {obj['id']!r}, "
+                            f"expected {playbook_id!r}")
+    if not isinstance(obj["relationship_vocabulary"], list):
+        raise PlaybookError(f"playbook {playbook_id!r}: relationship_vocabulary must be a list")
+    if not isinstance(obj["questions"], list) or not obj["questions"]:
+        raise PlaybookError(f"playbook {playbook_id!r}: questions must be a non-empty list")
+    seen_keys = set()
+    for q in obj["questions"]:
+        if not isinstance(q, dict):
+            raise PlaybookError(f"playbook {playbook_id!r}: each question must be an object")
+        missing_q = _QUESTION_REQUIRED_KEYS - q.keys()
+        if missing_q:
+            raise PlaybookError(f"playbook {playbook_id!r}: question {q.get('key', '?')!r} "
+                                f"missing key(s): {sorted(missing_q)}")
+        if q["key"] in seen_keys:
+            raise PlaybookError(f"playbook {playbook_id!r}: duplicate question key {q['key']!r}")
+        seen_keys.add(q["key"])
+    return obj
+
+
+_PLAYBOOK_CACHE: dict[str, dict] = {}
+
+
+def load_playbook(playbook_id: str) -> dict:
+    """Load and validate playbooks/<id>.json. Cached after the first successful
+    load (playbook files are static within a process lifetime). Raises
+    PlaybookError -- never returns a half-populated lens -- when the file is
+    missing, unreadable, not JSON, or fails shape validation."""
+    if playbook_id in _PLAYBOOK_CACHE:
+        return _PLAYBOOK_CACHE[playbook_id]
+    path = PLAYBOOKS_DIR / f"{playbook_id}.json"
+    if not path.exists():
+        raise PlaybookError(f"unknown playbook {playbook_id!r}: no file at {path}")
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as e:
+        raise PlaybookError(f"playbook {playbook_id!r} could not be read: {e}") from e
+    try:
+        obj = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise PlaybookError(f"playbook {playbook_id!r} is not valid JSON: {e}") from e
+    obj = _validate_playbook(obj, playbook_id)
+    _PLAYBOOK_CACHE[playbook_id] = obj
+    log.info("interview: loaded playbook %r -- %d question(s), relationship vocab=%s",
+             playbook_id, len(obj["questions"]), obj["relationship_vocabulary"])
+    return obj
+
+
+def playbook_steps(playbook: dict) -> list[tuple]:
+    """The playbook's questions in the (key, question, follow-up, thin-answer
+    threshold) tuple shape the onboarding step logic has always used."""
+    return [(q["key"], q["question"], q.get("followup") or None, int(q["thin_threshold"]))
+            for q in playbook["questions"]]
+
+
+def available_playbooks() -> list[dict]:
+    """id/name/description for every loadable playbook on disk, for the
+    lens-choice question. A file that fails to load is logged and skipped
+    rather than raised here -- the interview can still offer the playbooks
+    that ARE good, but load_playbook() still raises loudly if that broken
+    one is actually selected."""
+    out = []
+    if not PLAYBOOKS_DIR.is_dir():
+        return out
+    for p in sorted(PLAYBOOKS_DIR.glob("*.json")):
+        try:
+            pb = load_playbook(p.stem)
+        except PlaybookError as e:
+            log.warning("interview: skipping unloadable playbook file %s: %s", p.name, e)
+            continue
+        out.append({"id": pb["id"], "name": pb["name"], "description": pb["description"]})
+    return out
+
+
+def _match_playbook(text: str, pbs: list[dict]) -> str | None:
+    """Match a free-text reply against a playbook id or name. Deliberately
+    simple (exact, normalized match) -- there is one playbook in the MVP, and
+    reconstruct()'s marker contract needs the match to be a pure function of
+    the text, not a model call."""
+    t = _normalize_reply(text)
+    for p in pbs:
+        if t == p["id"].lower() or t == p["name"].lower():
+            return p["id"]
+    return None
+
+
+def _read_current_playbook_id(vault_dir) -> str | None:
+    """The playbook this deployment already committed to, if any -- read
+    straight from Profile.md's front matter, the one place it is persisted."""
+    page = Path(vault_dir) / "Profile.md"
+    if not page.exists():
+        return None
+    fm = registry.parse_front_matter(page.read_text(encoding="utf-8", errors="replace"))
+    pid = str(fm.get("cairn-playbook", "")).strip()
+    return pid or None
+
+
+def _lens_question() -> str:
+    pbs = available_playbooks()
+    lines = [f"- **{p['id']}** -- {p['description']}" for p in pbs]
+    return ("One optional question first: which playbook should shape this "
+            "interview -- its questions and its relationship vocabulary?\n\n"
+            + "\n".join(lines) +
+            f"\n\nName one, or skip for the default (**{DEFAULT_PLAYBOOK_ID}**).")
+
 
 ONBOARDING_INTRO = (
-    "Happy to -- let's set Cairn up. Five quick questions, one at a time; "
+    "Happy to -- let's set Cairn up. One optional question about which lens "
+    "to use, then a handful of quick questions from it, one at a time; "
     "10-15 minutes tops. Nothing is written until you confirm the playback at "
     "the end, and you can type /cancel anytime.\n\n"
 )
@@ -449,27 +558,31 @@ def _coerce_checkin(obj: dict) -> dict:
     return out
 
 
-def _qa_transcript(flow: str, pairs, agenda=None) -> str:
+def _qa_transcript(flow: str, pairs, agenda=None, ob_steps=None) -> str:
     """The Q/A record handed to the parsing model -- questions included so the
-    model can resolve 'the first one' / 'both of those' style answers."""
+    model can resolve 'the first one' / 'both of those' style answers. The
+    lens-choice turns (and its singleton-conflict follow-up, when raised) are
+    never content answers, so they are excluded here regardless of flow."""
     lines = []
     for marker, answer in pairs:
         step = marker.get("s")
-        if step in ("confirm", "done", "cancelled"):
+        if step in ("confirm", "done", "cancelled", "lens", "lens_confirm"):
             continue
         if flow == "ob":
-            q = next((q for k, q, _f, _t in ONBOARDING_STEPS if k == step), step)
+            steps = ob_steps or []
+            q = next((q for k, q, _f, _t in steps if k == step), step)
             if marker.get("n"):
-                q = next((f for k, _q, f, _t in ONBOARDING_STEPS if k == step), q) or q
+                q = next((f for k, _q, f, _t in steps if k == step), q) or q
         else:
             q = _checkin_question(step, agenda or {})
         lines.append(f"Q ({step}): {q}\nA: {answer}\n")
     return "\n".join(lines)
 
 
-def parse_onboarding(pairs) -> dict | None:
+def parse_onboarding(pairs, playbook: dict) -> dict | None:
+    steps = playbook_steps(playbook)
     parsed = _parse_with_retry(ONBOARD_PARSE_SYSTEM,
-                               "Interview transcript:\n\n" + _qa_transcript("ob", pairs))
+                               "Interview transcript:\n\n" + _qa_transcript("ob", pairs, ob_steps=steps))
     return _coerce_onboarding(parsed) if parsed is not None else None
 
 
@@ -499,8 +612,11 @@ def _fmt_aliases(aliases) -> str:
     return f" (aka {', '.join(aliases)})" if aliases else ""
 
 
-def playback_onboarding(data: dict) -> str:
+def playback_onboarding(data: dict, playbook: dict | None = None) -> str:
     lines = ["Here's what I've got -- the playback:\n"]
+    if playbook:
+        vocab = ", ".join(playbook["relationship_vocabulary"]) or "none"
+        lines.append(f"**Playbook:** {playbook['name']} (relationship terms: {vocab})\n")
     if data["role_context"]:
         lines.append(f"**Role & context:** {data['role_context']}\n")
     if data["projects"]:
@@ -634,9 +750,11 @@ def _ratify_new(conn, name: str, etype: str, aliases: list, vault_dir) -> str | 
     return page
 
 
-def write_profile(vault_dir, data: dict) -> str:
+def write_profile(vault_dir, data: dict, playbook_id: str = DEFAULT_PLAYBOOK_ID) -> str:
     """Profile.md at the vault root: the user's own words, played back and
-    confirmed -- personal content by adoption."""
+    confirmed -- personal content by adoption. Also carries `cairn-playbook`,
+    the one place the deployment's singleton playbook choice is persisted
+    (the owner's ruling: Cairn holds at most one playbook at a time)."""
     page = Path(vault_dir) / "Profile.md"
     existed = page.exists()
     if existed:
@@ -646,7 +764,7 @@ def write_profile(vault_dir, data: dict) -> str:
         backup = Path(vault_dir) / "Profile (previous).md"
         backup.write_text(page.read_text(encoding="utf-8"), encoding="utf-8")
         log.info("interview write: backed up existing Profile.md -> %s", backup.name)
-    lines = ["---", "cairn-type: profile", "---", ""]
+    lines = ["---", "cairn-type: profile", f"cairn-playbook: {playbook_id}", "---", ""]
     if data.get("role_context"):
         lines += ["## Role & context", "", data["role_context"], ""]
     if data.get("priorities"):
@@ -657,15 +775,15 @@ def write_profile(vault_dir, data: dict) -> str:
         lines.append("")
     Path(vault_dir).mkdir(parents=True, exist_ok=True)
     page.write_text("\n".join(lines), encoding="utf-8")
-    log.info("interview write: %s Profile.md at vault root",
-             "REPLACED (re-ratified by confirmation)" if existed else "wrote")
+    log.info("interview write: %s Profile.md at vault root (playbook=%s)",
+             "REPLACED (re-ratified by confirmation)" if existed else "wrote", playbook_id)
     return str(page)
 
 
-def commit_onboarding(conn, data: dict, vault_dir) -> list[str]:
+def commit_onboarding(conn, data: dict, vault_dir, playbook_id: str = DEFAULT_PLAYBOOK_ID) -> list[str]:
     """Everything the confirmed onboarding playback ratifies. Returns paths written."""
     ensure_entity_columns(conn)
-    written = [write_profile(vault_dir, data)]
+    written = [write_profile(vault_dir, data, playbook_id)]
     for p in data.get("projects", []):
         path = _ratify_new(conn, p["name"], "project", p.get("aliases", []), vault_dir)
         if path:
@@ -757,6 +875,75 @@ def handle(messages):
         conn.close()
 
 
+def _handle_lens_step(vault_dir, step, marker, latest):
+    """Handle the optional lens-choice question and, when it conflicts with
+    the deployment's already-persisted playbook, the confirmation it raises.
+
+    Singleton rule (owner's ruling): Cairn holds at most one playbook per
+    deployment. Re-running the interview with the SAME playbook (including
+    the common case where the user skips and gets the recorded default back)
+    is unremarkable. Picking a DIFFERENT one is not silently honored -- it is
+    surfaced and requires an explicit "yes"; declining keeps the existing
+    playbook and the interview continues with THAT lens, so the user is never
+    stuck mid-flow."""
+    if step == "lens":
+        pbs = available_playbooks()
+        if _is_skip(latest):
+            chosen = DEFAULT_PLAYBOOK_ID
+            log.info("interview[ob]: lens question skipped -> default playbook %r", chosen)
+        else:
+            matched = _match_playbook(latest, pbs)
+            if matched is None:
+                # Never silently fall back to the default here. Skipping is an
+                # explicit choice and is honored above; an unrecognized reply is
+                # something else entirely -- a typo, or a lens the user believes
+                # exists but does not yet (typing "government" is the single most
+                # likely such reply, since that lens is planned but unbuilt).
+                # Quietly substituting the default would COMMIT the deployment to
+                # a lens the user did not pick, and the singleton ruling makes
+                # that commitment sticky. So say so and ask again.
+                names = ", ".join(f"**{p['id']}**" for p in pbs) or "(none installed)"
+                log.warning("interview[ob]: lens reply %r matched no playbook; re-asking "
+                            "rather than defaulting", latest)
+                yield (f"I don't have a playbook called \"{latest.strip()}\". "
+                       f"Available right now: {names}.\n\n"
+                       f"Name one of those, or say **skip** to use the default "
+                       f"(**{DEFAULT_PLAYBOOK_ID}**)." + _mk("ob", "lens"))
+                return
+            chosen = matched
+            log.info("interview[ob]: lens chosen -> %r", chosen)
+        existing = _read_current_playbook_id(vault_dir)
+        if existing and existing != chosen:
+            log.warning("interview[ob]: playbook conflict -- deployment runs %r, this "
+                        "run chose %r; asking the user to confirm the switch",
+                        existing, chosen)
+            yield (f"Heads up: this Cairn deployment already runs the **{existing}** "
+                   f"playbook, set by a previous interview. Cairn holds one playbook "
+                   f"at a time, so continuing would switch it to **{chosen}**.\n\n"
+                   f"Type **yes** to switch, or anything else to keep **{existing}** "
+                   "and continue this interview with it instead."
+                   + _mk("ob", "lens_confirm", extra={"chosen": chosen, "existing": existing}))
+            return
+        playbook = load_playbook(chosen)
+        key, q, _f, _t = playbook_steps(playbook)[0]
+        yield q + _mk("ob", key, extra={"pb": chosen})
+        return
+
+    # step == "lens_confirm"
+    chosen, existing = marker.get("chosen"), marker.get("existing")
+    if _is_affirmative(latest):
+        log.warning("interview[ob]: playbook switch CONFIRMED by user -- %r -> %r",
+                    existing, chosen)
+        pb_id = chosen
+    else:
+        log.info("interview[ob]: playbook switch declined -- continuing with existing %r",
+                 existing)
+        pb_id = existing
+    playbook = load_playbook(pb_id)
+    key, q, _f, _t = playbook_steps(playbook)[0]
+    yield q + _mk("ob", key, extra={"pb": pb_id})
+
+
 def _handle(conn, messages):
     st = reconstruct(messages)
     if st is None:   # defensive; ask.py checks is_interview() first
@@ -777,8 +964,7 @@ def _handle(conn, messages):
     if marker is None:
         if flow == "ob":
             log.info("interview[ob]: started")
-            key, q, _f, _t = ONBOARDING_STEPS[0]
-            yield ONBOARDING_INTRO + q + _mk("ob", key)
+            yield ONBOARDING_INTRO + _lens_question() + _mk("ob", "lens")
         else:
             agenda = build_agenda(conn)
             steps = _checkin_steps(agenda)
@@ -792,9 +978,10 @@ def _handle(conn, messages):
     # -- confirm step: the user's reply IS the ratification decision --
     if marker.get("s") == "confirm":
         data = marker.get("d") or {}
+        pb_id = marker.get("pb") or DEFAULT_PLAYBOOK_ID
         if _is_affirmative(latest):
             log.info("interview[%s]: playback CONFIRMED -- writing", flow)
-            written = (commit_onboarding(conn, data, vault_dir) if flow == "ob"
+            written = (commit_onboarding(conn, data, vault_dir, pb_id) if flow == "ob"
                        else commit_checkin(conn, data, vault_dir))
             names = "\n".join(f"- {Path(w).name}" for w in written) or "- (no file changes needed)"
             yield (f"Done -- ratified and written:\n{names}\n\n"
@@ -806,43 +993,57 @@ def _handle(conn, messages):
             if revised is None:
                 yield (PARSE_FAILURE_TEXT +
                        _mk(flow, "confirm", extra={"d": data, "a": agenda} if flow == "ci"
-                           else {"d": data}))
+                           else {"d": data, "pb": pb_id}))
                 return
-            pb = playback_onboarding(revised) if flow == "ob" else playback_checkin(revised)
-            extra = {"d": revised, "a": agenda} if flow == "ci" else {"d": revised}
+            playbook = load_playbook(pb_id) if flow == "ob" else None
+            pb = playback_onboarding(revised, playbook) if flow == "ob" else playback_checkin(revised)
+            extra = {"d": revised, "a": agenda} if flow == "ci" else {"d": revised, "pb": pb_id}
             yield "Updated. " + pb + _mk(flow, "confirm", extra=extra)
         return
 
     # -- a scripted question was just answered --
     step, followed_up = marker.get("s"), marker.get("n", 0)
+
+    # The optional lens-choice question (and, when the deployment already
+    # committed to a different playbook, the singleton-conflict confirmation
+    # it raises) precedes the playbook's own questions. Handled separately
+    # because it is the one onboarding turn that is not "ask the next
+    # scripted question from a fixed list."
+    if flow == "ob" and step in ("lens", "lens_confirm"):
+        yield from _handle_lens_step(vault_dir, step, marker, latest)
+        return
+
     if flow == "ob":
-        keys = [k for k, *_ in ONBOARDING_STEPS]
+        pb_id = marker.get("pb") or DEFAULT_PLAYBOOK_ID
+        playbook = load_playbook(pb_id)
+        steps = playbook_steps(playbook)
+        keys = [k for k, *_ in steps]
         if step not in keys:
             step = keys[0]
         idx = keys.index(step)
-        _k, _q, followup, thin = ONBOARDING_STEPS[idx]
+        _k, _q, followup, thin = steps[idx]
         if (followup and not followed_up and not _is_skip(latest)
                 and len(latest.strip()) < thin):
             log.info("interview[ob]: step %s answer thin (%d chars) -> follow-up",
                      step, len(latest.strip()))
-            yield followup + _mk("ob", step, n=1)
+            yield followup + _mk("ob", step, n=1, extra={"pb": pb_id})
             return
         if idx + 1 < len(keys):
-            nkey, nq, _f, _t = ONBOARDING_STEPS[idx + 1]
+            nkey, nq, _f, _t = steps[idx + 1]
             log.info("interview[ob]: step %s -> %s", step, nkey)
-            yield _ACKS.get(step, "") + nq + _mk("ob", nkey)
+            yield _ACKS.get(step, "") + nq + _mk("ob", nkey, extra={"pb": pb_id})
             return
         log.info("interview[ob]: all steps answered -> parsing answers")
-        data = parse_onboarding(st["pairs"])
+        data = parse_onboarding(st["pairs"], playbook)
         if data is None:
-            yield PARSE_FAILURE_TEXT + _mk("ob", step, n=1)
+            yield PARSE_FAILURE_TEXT + _mk("ob", step, n=1, extra={"pb": pb_id})
             return
         log.info("interview[ob]: parsed -- %d project(s), %d person(s), "
-                 "%d priorit(ies), %d vocab term(s)",
+                 "%d priorit(ies), %d vocab term(s), playbook=%r",
                  len(data["projects"]), len(data["people"]),
-                 len(data["priorities"]), len(data["vocabulary"]))
-        yield (_ACKS.get(step, "") + playback_onboarding(data)
-               + _mk("ob", "confirm", extra={"d": data}))
+                 len(data["priorities"]), len(data["vocabulary"]), pb_id)
+        yield (_ACKS.get(step, "") + playback_onboarding(data, playbook)
+               + _mk("ob", "confirm", extra={"d": data, "pb": pb_id}))
         return
 
     # check-in steps
